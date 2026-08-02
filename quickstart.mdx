@@ -5,7 +5,10 @@ sidebarTitle: "Quickstart"
 icon: "rocket"
 ---
 
-This is the shortest complete server-side integration path. It uses the hosted private-preview API, which currently accepts `att_test_...` keys only.
+This is the shortest complete server-side integration path, running on the free
+test environment. Use the test API at `https://api-staging.attesso.com` with an
+`att_test_` key. The live environment at `https://api.attesso.com` requires
+`att_live_` keys, which are enabled only after linking Stripe Billing.
 
 ## Prerequisites
 
@@ -21,7 +24,7 @@ This is the shortest complete server-side integration path. It uses the hosted p
 ## 1. Configure the test request
 
 ```zsh
-export ATTESSO_API_URL="https://api.attesso.com"
+export ATTESSO_API_URL="https://api-staging.attesso.com"
 read -r -s "ATTESSO_API_KEY?Paste your att_test_ key: "
 export ATTESSO_API_KEY
 
