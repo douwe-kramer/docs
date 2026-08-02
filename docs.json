@@ -73,8 +73,8 @@
     ]
   },
   "logo": {
-    "light": "/logo/attesso-wordmark-light.svg",
-    "dark": "/logo/attesso-wordmark-dark.svg",
+    "light": "/logo/logoattesso.png",
+    "dark": "/logo/logoattesso-white.png",
     "href": "https://www.attesso.com"
   },
   "navbar": {
