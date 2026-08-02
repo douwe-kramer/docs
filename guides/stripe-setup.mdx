@@ -1,0 +1,44 @@
+---
+title: Stripe setup
+description: Link Attesso's own Stripe Billing to enable live keys — $0.35 USD per approved live Mandate, invoiced monthly.
+---
+
+This page covers Attesso's own Stripe Billing connection. It does not configure
+or access any payment account CompanyX may use to execute an approved action.
+
+The free test environment uses `https://api-staging.attesso.com` and `att_test_`
+keys. The live environment uses `https://api.attesso.com` and `att_live_` keys.
+Both are server-only credentials and are not interchangeable.
+
+## Link Attesso Billing
+
+1. Open `https://www.attesso.com/dashboard`.
+2. Initialize the Test and Live workspaces.
+3. Complete a test Mandate lifecycle first.
+4. In the Live block, choose **Link Stripe Billing**.
+5. Complete Stripe-hosted Checkout and return to the dashboard.
+6. Wait until the dashboard reports an active billing entitlement before creating
+   a live API key.
+
+The success redirect does not activate live access. Attesso verifies a signed
+Stripe webhook, retrieves current subscription state, and then persists the
+entitlement server-side.
+
+The V1 price is **$0.35 USD per successfully approved live Mandate**, invoiced at
+the end of the monthly subscription period. Applicable taxes are additional. Only
+the first transition from `PENDING_APPROVAL` to `ACTIVE` or `SCHEDULED` is
+billable. Failed, rejected, cancelled, expired, duplicate, retried, and test
+activity is free. There is no Attesso base fee, minimum, tier, or discount. A USD
+invoice below Stripe's collection minimum may carry forward rather than creating
+an Attesso minimum.
+
+Use **Manage billing** in the dashboard for payment methods, invoices, and
+cancellation. Cancellation takes effect at the end of the current billing period,
+allowing already-recorded approved usage to be invoiced. `active` and `past_due`
+remain entitled; canceled, unpaid, incomplete, expired-incomplete, or paused
+subscriptions suspend live keys without deleting them.
+
+Attesso does not execute payments, issue cards, hold payment credentials, or
+connect to CompanyX's payment account. CompanyX remains responsible for any
+external executor, credentials, funds, compliance, and reconciliation. Public
+support is available only at `info@attesso.com`.

@@ -1,0 +1,85 @@
+---
+title: Generic executor integration
+description: Attesso authorizes; CompanyX executes. A guide for any external API, queue, worker, or manual executor.
+---
+
+Attesso authorizes; CompanyX executes. This guide applies to any external API,
+queue, worker, or manual executor.
+
+Use `https://api-staging.attesso.com` with an `att_test_` key for the free test
+environment. Use `https://api.attesso.com` with an `att_live_` key for live.
+Keys are server-side credentials and cannot be used across environments. Test
+does not require billing; live-key creation requires server-verified Stripe
+entitlement.
+
+## Required loop
+
+1. Create an immutable Mandate with a CompanyX subject reference, an external
+   reference, structured policy, approval deadline, and validity window.
+2. Send the authenticated End User through one short-lived hosted approval
+   session.
+3. Wait for `ACTIVE` or `SCHEDULED`. A browser return is not approval evidence.
+4. Submit the exact Proposed Action and a stable external reference.
+5. Execute only when `can_execute` is exactly `true`, before `execute_before`.
+6. Send the accepted action to the executor with its own stable idempotency key.
+7. Commit only after definite acceptance; cancel only after definite
+   non-acceptance.
+8. Reconcile ambiguous executor results before committing or canceling.
+9. Verify and retain the Attesso evidence bundle under CompanyX's own retention
+   policy.
+
+## Binding rules
+
+The executor request must be derived from the same immutable object that was sent
+to `/authorizations`. Do not authorize one amount, destination, account, or item
+and then rebuild a different executor request from mutable UI or agent state.
+
+Use separate identifiers for separate boundaries:
+
+| Boundary | Identifier |
+| --- | --- |
+| Mandate creation | one Attesso idempotency key per logical Mandate |
+| Authorization creation | one Attesso idempotency key per exact Proposed Action |
+| Executor call | one CompanyX external reference/idempotency key |
+| Commit/cancel | one Attesso idempotency key per finality operation |
+
+Retries must reuse the same key only when the operation and bytes are logically
+the same. Never turn a changed operation into a retry.
+
+## Decision handling
+
+- `can_execute: true`: reserve and execute before `execute_before`.
+- `can_execute: false`: do not call the executor.
+- network error, timeout, invalid response, or unknown state: fail closed and do
+  not call the executor.
+
+An Authorization is a reservation, not proof that execution happened. CompanyX
+must still report finality:
+
+- **commit** after the executor accepted the action;
+- **cancel** after definite non-acceptance;
+- **reconcile first** after an ambiguous result.
+
+## Secrets and data
+
+Keep Attesso keys and executor credentials only on CompanyX's server. Do not send
+payment credentials, provider secrets, identity-signing private keys, or passkey
+material to Attesso. Evidence may contain references and policy facts, so avoid
+putting credentials or unnecessary personal data in free-form references.
+
+## Test before live
+
+The free test environment must cover allow, deny, expired approval, executor
+rejection, executor timeout/reconciliation, duplicate retry, commit replay, and
+cancel replay. Move to live only after billing is linked and the same CompanyX
+executor path has passed those cases.
+
+Only the first live transition from `PENDING_APPROVAL` to `ACTIVE` or
+`SCHEDULED` costs $0.35 USD. Applicable taxes are additional. There is no Attesso
+base fee, minimum, tier, or discount. Failed, rejected, cancelled, expired,
+duplicate, retried, and test activity is free. A sub-minimum Stripe invoice may
+carry forward. A Checkout return is never proof of active billing.
+
+Attesso does not execute payments or other external actions, issue cards, hold
+payment credentials, or connect to CompanyX's payment account. Public support is
+available only at `info@attesso.com`.
