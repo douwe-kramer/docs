@@ -7,7 +7,7 @@
     "light": "#F7EEF2",
     "dark": "#0F172A"
   },
-  "favicon": "https://www.attesso.com/favicon.jpg",
+  "favicon": "/favicon-32.png",
   "navigation": {
     "pages": [
       {
