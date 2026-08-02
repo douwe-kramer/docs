@@ -1,0 +1,71 @@
+---
+title: "Complete an authorization"
+description: "Gate execution, commit acceptance, cancel safely, and reconcile retries."
+icon: "git-branch"
+---
+
+## Gate execution
+
+Execute only when the latest Authorization has all three values:
+
+```json
+{
+  "decision": "ALLOW",
+  "state": "RESERVED",
+  "can_execute": true
+}
+```
+
+Start and finish before `execute_before`, and ensure any external credential cannot act after that deadline.
+
+## Commit after acceptance
+
+Commit means the external executor accepted the action. It does not mean a card was created, a payment settled, or a service was fulfilled.
+
+```http
+PUT /v1/authorizations/{authorization_id}/commit
+Authorization: Bearer att_test_...
+Idempotency-Key: commit_...
+Content-Type: application/json
+```
+
+```json
+{
+  "external_action_reference": "booking_91823",
+  "provider_transaction_reference": "provider_77401",
+  "reported_accepted_at": "2026-08-10T03:02:41Z"
+}
+```
+
+A successful commit atomically changes the Authorization to `COMMITTED` and its Mandate to `CONSUMED`.
+
+## Cancel only when execution is impossible
+
+Disable every external card, token, job, or provider capability before calling the cancellation endpoint.
+
+```json
+{
+  "reason": "EXECUTION_FAILED",
+  "execution_disposition": "NO_LONGER_POSSIBLE",
+  "external_credential_reference": "vcc_opaque_481"
+}
+```
+
+Use `NEVER_BECAME_POSSIBLE` only when no external capability was ever usable.
+
+## Resolve an uncertain response
+
+<Steps>
+  <Step title="Stop new execution">
+    A timeout or `503` never grants permission. Do not start another action.
+  </Step>
+  <Step title="Read current state">
+    Retrieve `GET /v1/authorizations/{authorization_id}`.
+  </Step>
+  <Step title="Replay the same operation">
+    If still appropriate, retry with the same idempotency key and identical body.
+  </Step>
+  <Step title="Escalate terminal conflicts">
+    A committed, cancelled, or expired Authorization cannot transition again.
+  </Step>
+</Steps>

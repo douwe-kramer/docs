@@ -1,0 +1,46 @@
+---
+title: "API overview"
+sidebarTitle: "Overview"
+description: "Review Attesso v1 resources, media types, and the current hosted environment."
+icon: "braces"
+---
+
+The Attesso API is a server-to-server JSON interface for Mandates, Authorizations, and signed evidence.
+
+## Current availability
+
+| Access | Base URL | Key prefix |
+| --- | --- | --- |
+| Private test preview | `https://api.attesso.com` | `att_test_...` |
+| Live | Not yet available | `att_live_...` reserved |
+
+The production hostname currently serves the private test checkpoint. Do not represent it as generally available live service. Test and live will be split before external production onboarding.
+
+## Public resources
+
+| Resource | Operations |
+| --- | --- |
+| Mandate | Create, retrieve, create approval session, revoke, retrieve evidence |
+| Authorization | Evaluate and reserve, retrieve, commit, cancel |
+| Verification keys | Retrieve retained evidence public keys |
+
+The `/browser/v1/...` routes belong exclusively to Attesso's isolated approval frontend. Company integrations must not call them.
+
+## Media types
+
+- Requests and ordinary responses: `application/json`
+- Problem responses: `application/problem+json`
+- Signed evidence: `application/jose+json`
+
+## Response headers
+
+- `Attesso-Request-Id` is safe to log and share for support correlation.
+- `Idempotency-Replayed: true` identifies a successful replay.
+- `Location` identifies a newly created resource where supplied.
+- `Retry-After` may accompany a retryable response.
+
+<Warning>
+  HTTP success is not permission to execute. Continue only while the latest Authorization has `can_execute: true`.
+</Warning>
+
+The resource operations above are the public v1 surface. The internal browser routes are not integration endpoints.

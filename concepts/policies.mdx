@@ -1,0 +1,50 @@
+---
+title: "Policies"
+description: "Bound one action with Attesso's closed, deterministic policy language."
+icon: "list-checks"
+---
+
+Your backend translates end-user intent into a structured policy. Attesso does not evaluate prompts, scripts, natural language, or provider-specific rules.
+
+```json
+{
+  "version": "1",
+  "action": "flight.book",
+  "constraints": [
+    { "path": "attributes.origin", "operator": "eq", "value": "AMS" },
+    { "path": "attributes.destination", "operator": "in", "values": ["LIS", "JFK"] },
+    {
+      "path": "attributes.departureDate",
+      "operator": "date_range",
+      "on_or_after": "2026-08-01",
+      "on_or_before": "2026-08-14"
+    },
+    { "path": "payment.amount", "operator": "max", "value": 15000 },
+    { "path": "payment.currency", "operator": "eq", "value": "EUR" }
+  ]
+}
+```
+
+## Operators
+
+| Operator | Behavior |
+| --- | --- |
+| `eq` | Exact JSON type and value equality |
+| `in` | Exact membership in the supplied values |
+| `max` | Inclusive integer maximum |
+| `date_range` | Inclusive `YYYY-MM-DD` range |
+
+All constraints use logical `AND`, and exactly one constraint may target each path. There is no coercion, case folding, wildcard, regex, locale processing, timezone conversion, floating point input, or Unicode normalization.
+
+## Fail-closed evaluation
+
+- A present value that violates a constraint produces `DENY`.
+- Missing, incorrectly typed, or unsupported data produces `INDETERMINATE`.
+- Neither result creates a reservation.
+- A different valid action name produces `DENY` without evaluating unrelated constraints.
+
+## Payment authority
+
+A policy either has no payment paths, or exactly one positive `payment.amount` `max` and one uppercase `payment.currency` `eq`. Amounts use integer minor units, so `15000` means EUR 150.00.
+
+Policy arrays are digest-significant. Preserve constraint order and the order of values inside `in` constraints.

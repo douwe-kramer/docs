@@ -1,0 +1,147 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "Attesso",
+  "colors": {
+    "primary": "#D4A0B5",
+    "light": "#F7EEF2",
+    "dark": "#0F172A"
+  },
+  "favicon": "https://www.attesso.com/favicon.jpg",
+  "navigation": {
+    "pages": [
+      {
+        "group": "Getting Started",
+        "pages": [
+          "index",
+          "quickstart"
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Website",
+          "icon": "house",
+          "href": "https://www.attesso.com"
+        },
+        {
+          "anchor": "Status",
+          "icon": "activity",
+          "href": "https://www.attesso.com/status"
+        }
+      ]
+    },
+    "groups": [
+      {
+        "group": "Start",
+        "icon": "rocket",
+        "expanded": true,
+        "pages": [
+          "index",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Core model",
+        "icon": "shapes",
+        "pages": [
+          "concepts/core-model",
+          "concepts/policies"
+        ]
+      },
+      {
+        "group": "Integration guides",
+        "icon": "book-open-check",
+        "pages": [
+          "guides/hosted-approval",
+          "guides/complete-an-authorization",
+          "guides/verify-evidence"
+        ]
+      },
+      {
+        "group": "Reference",
+        "icon": "braces",
+        "pages": [
+          "reference/overview",
+          "reference/authentication",
+          "reference/errors-and-idempotency"
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "https://www.attesso.com/favicon.jpg",
+    "dark": "https://www.attesso.com/favicon.jpg",
+    "href": "https://www.attesso.com"
+  },
+  "navbar": {
+    "links": [
+      {
+        "href": "https://www.attesso.com",
+        "label": "Website"
+      },
+      {
+        "href": "https://www.attesso.com/contact",
+        "label": "Contact"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Dashboard",
+      "href": "https://www.attesso.com/dashboard"
+    }
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "cursor"
+    ]
+  },
+  "description": "Bounded authorization and signed evidence for agent-led actions.",
+  "fonts": {
+    "family": "Geist"
+  },
+  "appearance": {
+    "default": "light",
+    "strict": true
+  },
+  "background": {
+    "color": {
+      "light": "#FFFFFF",
+      "dark": "#0F172A"
+    }
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "styling": {
+    "eyebrows": "section",
+    "codeblocks": {
+      "theme": "github-light"
+    }
+  },
+  "interaction": {
+    "drilldown": true
+  },
+  "redirects": [
+    {
+      "source": "/getting-started/how-attesso-works",
+      "destination": "/"
+    },
+    {
+      "source": "/concepts/mandates",
+      "destination": "/concepts/core-model"
+    },
+    {
+      "source": "/concepts/authorizations",
+      "destination": "/concepts/core-model"
+    },
+    {
+      "source": "/concepts/evidence",
+      "destination": "/guides/verify-evidence"
+    }
+  ]
+}

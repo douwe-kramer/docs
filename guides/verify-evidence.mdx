@@ -1,0 +1,87 @@
+---
+title: "Verify evidence"
+description: "Verify Attesso's portable ES256 evidence without trusting the dashboard."
+icon: "shield-check"
+---
+
+`GET /v1/mandates/{mandate_id}/evidence` returns a flattened JWS with media type `application/jose+json`.
+
+```json
+{
+  "format": "attesso.evidence.v1",
+  "protected": "base64url-header",
+  "payload": "base64url-evidence",
+  "signature": "base64url-signature"
+}
+```
+
+Verify the signature before decoding or trusting the evidence payload. Pin the format and `ES256`, resolve the protected `kid` only from Attesso's JWKS, and reject every mismatch.
+
+## Node.js verification
+
+The example uses `jose` and does not send the evidence or API key to a third party.
+
+```ts
+import { flattenedVerify, importJWK } from 'jose';
+
+const evidenceResponse = await fetch(
+  `${attessoApiUrl}/v1/mandates/${mandateId}/evidence`,
+  { headers: { Authorization: `Bearer ${attessoApiKey}` } },
+);
+if (!evidenceResponse.ok) throw new Error('Evidence retrieval failed');
+
+const envelope = await evidenceResponse.json();
+if (envelope.format !== 'attesso.evidence.v1') {
+  throw new Error('Unexpected evidence format');
+}
+
+const header = JSON.parse(
+  Buffer.from(envelope.protected, 'base64url').toString('utf8'),
+);
+if (header.alg !== 'ES256' || typeof header.kid !== 'string') {
+  throw new Error('Unexpected evidence header');
+}
+
+const jwksResponse = await fetch(`${attessoApiUrl}/.well-known/jwks.json`);
+if (!jwksResponse.ok) throw new Error('JWKS retrieval failed');
+const jwks = await jwksResponse.json();
+const jwk = jwks.keys.find(
+  (candidate: Record<string, unknown>) =>
+    candidate.kid === header.kid &&
+    candidate.kty === 'EC' &&
+    candidate.crv === 'P-256' &&
+    candidate.use === 'sig' &&
+    candidate.alg === 'ES256',
+);
+if (!jwk) throw new Error('Evidence key not found');
+
+const key = await importJWK(jwk, 'ES256');
+const verified = await flattenedVerify(
+  {
+    protected: envelope.protected,
+    payload: envelope.payload,
+    signature: envelope.signature,
+  },
+  key,
+  { algorithms: ['ES256'] },
+);
+
+const evidence = JSON.parse(Buffer.from(verified.payload).toString('utf8'));
+if (evidence.schema !== 'attesso.evidence.v1') {
+  throw new Error('Unexpected evidence schema');
+}
+```
+
+## What the signature covers
+
+- The immutable Mandate and policy digest
+- The verified approval proof
+- Every proposed action and Attesso decision
+- Reservation, commit, cancellation, revocation, and expiry events
+- Source-labelled lifecycle assertions supplied by your platform
+
+<Note>
+  Evidence is not a payment receipt or proof that an external provider performed an action. It distinguishes Attesso-verified events from facts your platform reported.
+</Note>
+
+Store the original signed envelope when you need a portable audit artifact. Treat any verification failure as a security incident.

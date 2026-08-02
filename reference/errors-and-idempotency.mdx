@@ -1,0 +1,59 @@
+---
+title: "Errors and idempotency"
+description: "Fail closed, make writes retry-safe, and reconcile uncertain outcomes."
+icon: "rotate-ccw"
+---
+
+Attesso uses `application/problem+json` when it supplies an error body.
+
+```json
+{
+  "type": "https://example.invalid/problem-type",
+  "title": "Human-readable summary",
+  "status": 422,
+  "code": "MACHINE_READABLE_CODE",
+  "detail": "Human-readable detail",
+  "request_id": "req_01J2ABCDEF",
+  "retryable": false,
+  "errors": [
+    {
+      "pointer": "/policy/constraints/0/value",
+      "code": "FIELD_ERROR_CODE",
+      "message": "Human-readable field detail"
+    }
+  ]
+}
+```
+
+Branch on `code`, `retryable`, and field pointers. Do not branch on human-readable messages.
+
+## Status handling
+
+| Status | Meaning | Default handling |
+| --- | --- | --- |
+| `400` | Malformed request syntax | Fix the request |
+| `401` | Missing or invalid API key | Fix configuration |
+| `404` | Resource unavailable in this organization | Verify ID and environment |
+| `409` | Idempotency conflict or invalid transition | Read and reconcile state |
+| `422` | Valid JSON violates schema or domain rules | Fix the request |
+| `429` | Rate limited | Back off; a body is not guaranteed |
+| `503` | Retryable infrastructure failure | Fail closed and retry safely |
+
+## Idempotency keys
+
+Every write requires `Idempotency-Key`. Keys contain 16–255 letters, digits, periods, underscores, colons, or hyphens.
+
+- Persist one key before sending each logical operation.
+- Retry that operation with the same key and identical logical input.
+- Use a new key for a new operation.
+- Reusing a key with different input returns `409`.
+- A successful replay returns the same resource identity in its current state.
+
+## Retry pattern
+
+1. Treat every timeout or unavailable response as non-permission.
+2. Keep the original operation identity and input.
+3. Back off with jitter and honor `Retry-After` when present.
+4. Read the Mandate or Authorization before starting any replacement action.
+
+Log the safe `Attesso-Request-Id` for support correlation. Never log API keys, identity assertions, approval URLs, or external credentials.

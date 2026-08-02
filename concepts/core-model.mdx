@@ -1,0 +1,50 @@
+---
+title: "Mandates and authorizations"
+description: "Understand immutable authority, reservations, and single-use execution."
+icon: "shapes"
+---
+
+## Mandates
+
+A Mandate is an immutable statement of what one authenticated end user approved. If the authority changes, create and approve a new Mandate rather than mutating the old one.
+
+Every Mandate contains an opaque `subject_reference`, one policy, an approval deadline, and a validity window of at most 30 days.
+
+| State | Meaning |
+| --- | --- |
+| `PENDING_APPROVAL` | Created but not approved |
+| `SCHEDULED` | Approved and starts later |
+| `ACTIVE` | Eligible for evaluation |
+| `CONSUMED` | One allowed execution was committed |
+| `REVOKED` | Permanently withdrawn |
+| `EXPIRED` | Approval or validity deadline passed |
+
+`CONSUMED`, `REVOKED`, and `EXPIRED` are terminal.
+
+## Authorizations
+
+An Authorization is the durable result of evaluating one proposed action. Every structurally valid evaluation creates one, including non-allow results.
+
+| Decision | Result |
+| --- | --- |
+| `ALLOW` | Every constraint matched and one reservation was created |
+| `DENY` | The action or a present value did not match |
+| `INDETERMINATE` | Required data was missing, incorrectly typed, or unsupported |
+
+An `ALLOW` starts in `RESERVED`. It may become `COMMITTED`, `CANCELLED`, or `EXPIRED`. Non-allow decisions use terminal `DENIED` or `INDETERMINATE` states.
+
+## Single-use guarantee
+
+- A Mandate may evaluate many candidates but can have only one active reservation.
+- Concurrent eligible requests cannot both reserve it.
+- Cancellation or reservation expiry permits a later eligible attempt.
+- Commit permanently consumes the Mandate.
+- `can_execute` is true only for an unexpired `ALLOW` reservation.
+
+<Warning>
+  Disable any external credential before cancelling or revoking. Attesso records your assertion but cannot disable cards, tokens, provider jobs, or bookings.
+</Warning>
+
+<Card title="Complete an authorization" icon="git-branch" href="/guides/complete-an-authorization">
+  Implement execution gating, commit, cancellation, and retries.
+</Card>

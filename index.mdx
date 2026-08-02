@@ -1,0 +1,59 @@
+---
+title: "Attesso documentation"
+description: "Integrate bounded mandates, single-use authorization, and signed evidence."
+sidebarTitle: "Overview"
+icon: "house"
+---
+
+Attesso is a server-to-server authorization and evidence layer for asynchronous agent actions. Your backend creates a bounded mandate, the end user approves it with a passkey, and Attesso evaluates the concrete action your system proposes.
+
+<Warning>
+  Attesso does not execute an action or move money. Continue only while the latest Authorization has `can_execute: true`.
+</Warning>
+
+## The complete flow
+
+<Steps>
+  <Step title="Create a mandate">
+    Convert authenticated end-user intent into a deterministic policy with fixed action, attribute, payment, and time bounds.
+  </Step>
+  <Step title="Collect approval">
+    Create a five-minute approval session and redirect the user to Attesso's hosted passkey ceremony.
+  </Step>
+  <Step title="Evaluate one action">
+    Submit the exact action your system intends to perform. `DENY` and `INDETERMINATE` always fail closed.
+  </Step>
+  <Step title="Execute and close">
+    Execute through your own systems before `execute_before`, then commit after acceptance or cancel only after execution is impossible.
+  </Step>
+  <Step title="Verify the record">
+    Retrieve and verify the signed evidence envelope independently of the Attesso dashboard.
+  </Step>
+</Steps>
+
+## Responsibility boundary
+
+| Attesso | Your platform |
+| --- | --- |
+| Validates and stores the immutable mandate | Authenticates the end user |
+| Hosts passkey approval | Converts intent into structured policy |
+| Evaluates and reserves one execution | Performs the external action |
+| Produces signed evidence | Reports external outcomes accurately |
+
+<CardGroup cols={2}>
+  <Card title="Run the quickstart" icon="rocket" href="/quickstart">
+    Follow the shortest complete integration path.
+  </Card>
+
+  <Card title="Understand the model" icon="shapes" href="/concepts/core-model">
+    Learn the states and single-use guarantees.
+  </Card>
+
+  <Card title="Define a policy" icon="list-checks" href="/concepts/policies">
+    Use the exact v1 constraint language.
+  </Card>
+
+  <Card title="Read the API reference" icon="braces" href="/reference/overview">
+    Review endpoints, media types, and environments.
+  </Card>
+</CardGroup>

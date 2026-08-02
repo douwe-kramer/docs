@@ -1,0 +1,58 @@
+---
+title: "Authentication"
+description: "Protect environment-scoped Attesso API keys and rotate them safely."
+icon: "key-round"
+---
+
+Authenticate server-to-server requests with a bearer API key:
+
+```http
+Authorization: Bearer att_test_...
+```
+
+## Keep keys server-side
+
+Never expose an Attesso key to:
+
+- Browser or mobile bundles
+- End users or AI agents
+- Logs, traces, analytics, errors, issues, or chat
+- Source control
+- Command arguments recorded in shell history or process listings
+
+<Warning>
+  The examples are copy-only. Never paste an Attesso API key into a browser-based tool or documentation form.
+</Warning>
+
+## Read a test key safely
+
+```zsh
+export ATTESSO_API_URL="https://api.attesso.com"
+read -r -s "ATTESSO_API_KEY?Paste your att_test_ key: "
+export ATTESSO_API_KEY
+```
+
+Remove it when the shell session ends:
+
+```zsh
+unset ATTESSO_API_KEY
+```
+
+## Rotation
+
+<Steps>
+  <Step title="Create a replacement">
+    Copy its one-time value directly into your backend secret store.
+  </Step>
+  <Step title="Verify the replacement">
+    Make a safe test request before changing deployed configuration.
+  </Step>
+  <Step title="Deploy the replacement">
+    Update the backend without exposing the value in logs.
+  </Step>
+  <Step title="Revoke the old key">
+    Revoke only after the replacement is confirmed active.
+  </Step>
+</Steps>
+
+Each organization may have at most two active keys per environment, allowing a short overlap during rotation. A missing or invalid key returns `401` and is not retryable until configuration changes.

@@ -1,0 +1,99 @@
+---
+title: "Hosted approval"
+description: "Bind your authenticated end user to one Mandate with a short-lived assertion and passkey."
+icon: "fingerprint"
+---
+
+Your backend signs an identity assertion, creates a five-minute approval session, and redirects the authenticated end user to Attesso. The assertion and approval URL are bearer secrets and must not be logged.
+
+## Identity assertion contract
+
+The compact JWS must use:
+
+| Field | Required value |
+| --- | --- |
+| `typ` | `attesso-identity+jwt` |
+| `alg` | `ES256` |
+| `kid` | An active registered key ID |
+| `iss` | Your exact registered issuer |
+| `sub` | The Mandate's exact `subject_reference` |
+| `aud` | `urn:attesso:approval:test:v1` for a test key |
+| `iat`, `exp` | Integer seconds; lifetime no longer than five minutes |
+| `jti` | Unique for this assertion |
+
+Attesso accepts only the configured issuer and public JWKs. It never fetches a key URL from the token and never receives your private key.
+
+## TypeScript
+
+Install `jose`, load the key from your secret store, and keep the resulting token in server memory only.
+
+```ts
+import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { importPKCS8, SignJWT } from 'jose';
+
+const privateKey = await importPKCS8(
+  await readFile(process.env.IDENTITY_PRIVATE_KEY_PATH!, 'utf8'),
+  'ES256',
+);
+const now = Math.floor(Date.now() / 1000);
+
+const identityAssertion = await new SignJWT({})
+  .setProtectedHeader({
+    typ: 'attesso-identity+jwt',
+    alg: 'ES256',
+    kid: process.env.IDENTITY_KEY_ID!,
+  })
+  .setIssuer(process.env.IDENTITY_ISSUER!)
+  .setSubject(mandateSubjectReference)
+  .setAudience('urn:attesso:approval:test:v1')
+  .setIssuedAt(now)
+  .setExpirationTime(now + 300)
+  .setJti(randomUUID())
+  .sign(privateKey);
+```
+
+## Python
+
+Install `PyJWT[crypto]` and apply the same fixed algorithm and claims.
+
+```python
+import os
+import time
+import uuid
+from pathlib import Path
+
+import jwt
+
+now = int(time.time())
+private_key = Path(os.environ["IDENTITY_PRIVATE_KEY_PATH"]).read_text()
+
+identity_assertion = jwt.encode(
+    {
+        "iss": os.environ["IDENTITY_ISSUER"],
+        "sub": mandate_subject_reference,
+        "aud": "urn:attesso:approval:test:v1",
+        "iat": now,
+        "exp": now + 300,
+        "jti": str(uuid.uuid4()),
+    },
+    private_key,
+    algorithm="ES256",
+    headers={
+        "typ": "attesso-identity+jwt",
+        "kid": os.environ["IDENTITY_KEY_ID"],
+    },
+)
+```
+
+## Create and handle the session
+
+Send the assertion with an exact pre-registered return origin and unpredictable `return_state` to `POST /v1/mandates/{mandate_id}/approval-sessions`.
+
+<Warning>
+  `approval_url` is a five-minute, single-use bearer URL. Redirect to it without analytics, logging, browser storage, or email.
+</Warning>
+
+After the passkey ceremony, Attesso returns the browser to your configured URL with an approval result in the fragment. Validate `attesso_state`, then retrieve the Mandate with your backend API key. The redirect is not proof of approval; the server-to-server Mandate state is authoritative.
+
+If a session expires, reauthenticate the user and create a new session. Never attempt to recover or reuse the old approval URL.
