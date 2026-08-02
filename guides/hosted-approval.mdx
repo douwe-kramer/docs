@@ -6,6 +6,38 @@ icon: "fingerprint"
 
 Your backend signs an identity assertion, creates a five-minute approval session, and redirects the authenticated end user to Attesso. The assertion and approval URL are bearer secrets and must not be logged.
 
+## Configure approval trust
+
+Before an approval session can be opened, register your identity provider in the dashboard (per environment: test and live). The API verifies the signed assertion it receives against these three values and refuses anything else.
+
+| Field | What to provide |
+| --- | --- |
+| Identity issuer | An HTTPS URL that exactly matches the `iss` claim on the assertion you sign |
+| Exact return origin | Where the browser returns after the passkey ceremony — a **bare origin** (scheme + host + optional port, **no path, no query**, no fragment) |
+| ES256 public JWKs | One or two `ES256`/`P-256` public JSON Web Keys (no private `d` value) |
+
+Return to the origin you registered exactly: `https://app.example.com` is allowed, but `https://app.example.com/approval-return` is **rejected** because it carries a path.
+
+Generate an ES256/P-256 key pair on your own infrastructure and register only its public key:
+
+```sh
+# Private key (keep server-side, never share)
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
+  -out identity.pem
+```
+
+Derive the public JWK from that PEM with the same `jose` tooling used to sign assertions (see below):
+
+```ts
+import { readFile } from 'node:fs/promises';
+import { importPKCS8 } from 'jose';
+
+const key = await importPKCS8(await readFile('identity.pem', 'utf8'), 'ES256');
+const { kty, crv, x, y } = await crypto.subtle.exportKey('jwk', key); // add use:"sig", alg:"ES256", kid
+```
+
+The registered JWK must be the **public** key that corresponds to the exact private key you sign with. Give it a stable `kid` and reference that same `kid` in the assertion header.
+
 ## Identity assertion contract
 
 The compact JWS must use:
