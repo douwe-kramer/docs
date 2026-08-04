@@ -11,10 +11,10 @@ The Attesso API is a server-to-server JSON interface for Mandates, Authorization
 
 | Access | Base URL | Key prefix |
 | --- | --- | --- |
-| Private test preview | `https://api.attesso.com` | `att_test_...` |
-| Live | Not yet available | `att_live_...` reserved |
+| Test | `https://api-staging.attesso.com` | `att_test_...` |
+| Live | `https://api.attesso.com` | `att_live_...` |
 
-The production hostname currently serves the private test checkpoint. Do not represent it as generally available live service. Test and live will be split before external production onboarding.
+The test environment is free and requires no billing. The live environment requires `att_live_` keys, which are enabled only after linking Stripe Billing. Test and live are separate deployments and databases; keys are not interchangeable.
 
 ## Public resources
 
