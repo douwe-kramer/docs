@@ -1,0 +1,23 @@
+name: Mirror to Codeberg
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Codeberg
+        env:
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+        run: |
+          set -euo pipefail
+          git remote add codeberg "https://douwe:${CODEBERG_TOKEN}@codeberg.org/attesso/docs.git"
+          git push --force --mirror codeberg
