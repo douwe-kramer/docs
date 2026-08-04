@@ -56,6 +56,8 @@
         "pages": [
           "guides/hosted-approval",
           "guides/complete-an-authorization",
+          "guides/bind-to-your-psp",
+          "guides/reconcile-authorizations",
           "guides/generic-executor",
           "guides/stripe-setup",
           "guides/verify-evidence"
@@ -102,7 +104,7 @@
       "cursor"
     ]
   },
-  "description": "Bounded authorization and signed evidence for agent-led actions.",
+  "description": "PSP-agnostic spending control and signed evidence for agent-led actions.",
   "fonts": {
     "family": "Geist"
   },

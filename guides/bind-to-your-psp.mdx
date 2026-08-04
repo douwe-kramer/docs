@@ -1,0 +1,134 @@
+---
+title: "Bind an authorization to your PSP"
+description: "Take an ALLOW from Attesso and execute it on your own payment provider."
+icon: "plug"
+---
+
+Attesso is a **spending-control layer**. It authorizes a proposed action against a user-signed mandate and returns a decision with signed evidence. Attesso never moves money, holds cards, or connects to your payment account — you keep your existing PSP (Stripe, Adyen, Wallester, Airwallex, or any other) and bind each Attesso authorization to an action on that rail.
+
+This guide shows the exact pattern for taking an `ALLOW` from Attesso and executing it against your own PSP. The pattern is the same for every provider: **authorize first, execute second, then report finality.**
+
+## The core pattern
+
+```text
+1. User approves a bounded mandate (max amount, allowed merchants, validity).
+2. Your agent finds a concrete action (e.g. "book flight, EUR 420, KLM").
+3. You call Attesso: POST /v1/mandates/{id}/authorizations  ->  ALLOW + reservation
+4. If can_execute is true, you execute the action on YOUR PSP.
+5. You report finality: commit (accepted) or cancel (rejected).
+6. Attesso signs the evidence of the whole lifecycle.
+```
+
+Attesso is **PSP-agnostic**: it never needs to know which provider you use. You bind the authorization to your rail with two fields:
+
+- `external_action_reference` — your idempotency key for the PSP call.
+- `provider_transaction_reference` — the PSP's transaction/charge ID (on commit).
+
+## Step 1 — Authorize the proposed action
+
+```http
+POST /v1/mandates/{mandate_id}/authorizations
+Authorization: Bearer <api_key>
+Idempotency-Key: aut_<your-unique-key>
+
+{
+  "external_reference": "booking-2026-08-04-001",
+  "proposed_action": {
+    "action": "flight.book",
+    "attributes": {
+      "route": "AMS-NYC",
+      "cabin": "economy"
+    },
+    "payment": { "amount": 42000, "currency": "EUR" }
+  },
+  "execution_window_seconds": 300
+}
+```
+
+**Response (ALLOW):**
+
+```json
+{
+  "id": "aut_01J2...",
+  "mandate_id": "mnd_01J2...",
+  "decision": "ALLOW",
+  "state": "RESERVED",
+  "can_execute": true,
+  "execute_before": "2026-08-04T12:05:00Z",
+  "proposed_action": { "...": "..." }
+}
+```
+
+**Execute only when `can_execute` is exactly `true` and before `execute_before`.** A `DENY` or `INDETERMINATE` means do not call your PSP.
+
+## Step 2 — Execute on your PSP
+
+Now bind the `ALLOW` to a real action on your rail. The request you send to your PSP must be derived from the **same immutable proposed action** you sent to Attesso — never rebuild it from mutable UI or agent state.
+
+### Stripe example
+
+```js
+// Stripe PaymentIntent, using the same amount/currency Attesso authorized.
+const paymentIntent = await stripe.paymentIntents.create({
+  amount: 42000,            // minor units, matches proposed_action.payment
+  currency: 'eur',
+  payment_method: pm_...,
+  confirm: true,
+  idempotencyKey: 'booking-2026-08-04-001', // your external_action_reference
+});
+// paymentIntent.id is your provider_transaction_reference
+```
+
+### Adyen example
+
+```js
+const response = await adyen.checkout.payments({
+  amount: { value: 42000, currency: 'EUR' },
+  reference: 'booking-2026-08-04-001', // your external_action_reference
+  paymentMethod: { type: 'scheme', ... },
+  merchantAccount: 'YourMerchant',
+});
+// response.pspReference is your provider_transaction_reference
+```
+
+## Step 3 — Report finality
+
+After the PSP returns a definite result, report it to Attesso. This is what closes the loop and produces the evidence.
+
+### Commit (the PSP accepted the action)
+
+```http
+POST /v1/authorizations/{authorization_id}/commit
+Idempotency-Key: commit_<your-unique-key>
+
+{
+  "external_action_reference": "booking-2026-08-04-001",
+  "provider_transaction_reference": "pi_3N...",
+  "reported_accepted_at": "2026-08-04T12:04:30Z"
+}
+```
+
+### Cancel (the PSP rejected, or you aborted)
+
+```http
+POST /v1/authorizations/{authorization_id}/cancellation
+Idempotency-Key: cancel_<your-unique-key>
+
+{
+  "reason": "EXECUTOR_REJECTED",
+  "execution_disposition": "NO_LONGER_POSSIBLE",
+  "external_credential_reference": "pm_3N..."
+}
+```
+
+## Idempotency and safety
+
+- Use a **separate idempotency key per boundary**: one for the authorization, one for the PSP call, one for the commit/cancel.
+- Retries must reuse the same key **only when the operation and bytes are logically identical**. Never turn a changed operation into a retry.
+- If the PSP call times out, **reconcile before committing or canceling** — a timeout is not proof the provider did nothing. See the [reconciliation guide](./reconcile-authorizations).
+
+## What this buys you
+
+- **Spending control**: the agent cannot exceed the user-signed bounds.
+- **Verifiable evidence**: the signed bundle proves the user approved the exact mandate and the agent stayed inside it — anyone can verify it without trusting Attesso (see [verify evidence](./verify-evidence)).
+- **No float, no license, no provider-adapter matrix**: you keep your PSP, your funds, and your compliance responsibility.

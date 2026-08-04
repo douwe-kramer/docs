@@ -1,11 +1,11 @@
 ---
 title: "Attesso documentation"
-description: "Integrate bounded mandates, single-use authorization, and signed evidence."
+description: "PSP-agnostic spending control: bounded mandates, single-use authorization, and signed evidence."
 sidebarTitle: "Overview"
 icon: "house"
 ---
 
-Attesso is a server-to-server authorization and evidence layer for asynchronous agent actions. Your backend creates a bounded mandate, the end user approves it with a passkey, and Attesso evaluates the concrete action your system proposes.
+Attesso is a server-to-server **spending-control and evidence layer** for asynchronous agent actions. Your backend creates a bounded mandate, the end user approves it with a passkey, and Attesso evaluates the concrete action your system proposes. You keep your own payment provider and bind each authorization to it.
 
 <Warning>
   Attesso does not execute an action or move money. Continue only while the latest Authorization has `can_execute: true`.

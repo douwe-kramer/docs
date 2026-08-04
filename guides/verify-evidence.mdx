@@ -17,59 +17,249 @@ icon: "shield-check"
 
 Verify the signature before decoding or trusting the evidence payload. Pin the format and `ES256`, resolve the protected `kid` only from Attesso's JWKS, and reject every mismatch.
 
-## Node.js verification
+## The signed envelope
 
-The example uses `jose` and does not send the evidence or API key to a third party.
+- `protected` decodes to `{"alg":"ES256","kid":"<key id>"}`.
+- `payload` decodes to the evidence JSON: `schema`, `generated_at`, `organization_id`, `mandate`, and `events`.
+- `signature` is an ES256 (ECDSA P-256) signature over the bytes `protected + "." + payload`. The signature is the raw 64-byte `R || S` form (IEEE P1363), **not** DER.
 
-```ts
-import { flattenedVerify, importJWK } from 'jose';
+## Node.js verification (no dependencies)
 
-const evidenceResponse = await fetch(
-  `${attessoApiUrl}/v1/mandates/${mandateId}/evidence`,
-  { headers: { Authorization: `Bearer ${attessoApiKey}` } },
-);
-if (!evidenceResponse.ok) throw new Error('Evidence retrieval failed');
+```js
+const crypto = require('crypto');
 
-const envelope = await evidenceResponse.json();
-if (envelope.format !== 'attesso.evidence.v1') {
-  throw new Error('Unexpected evidence format');
+async function verifyEvidence(evidence, jwks) {
+  if (evidence.format !== 'attesso.evidence.v1') {
+    throw new Error('Unexpected evidence format');
+  }
+  const header = JSON.parse(
+    Buffer.from(evidence.protected, 'base64url').toString('utf8'),
+  );
+  if (header.alg !== 'ES256' || typeof header.kid !== 'string') {
+    throw new Error('Unexpected evidence header');
+  }
+  const jwk = jwks.keys.find(
+    (k) =>
+      k.kid === header.kid &&
+      k.kty === 'EC' &&
+      k.crv === 'P-256' &&
+      k.use === 'sig' &&
+      k.alg === 'ES256',
+  );
+  if (!jwk) throw new Error('Evidence key not found');
+
+  const publicKey = crypto.createPublicKey({
+    key: {
+      kty: 'EC',
+      crv: 'P-256',
+      x: jwk.x,
+      y: jwk.y,
+    },
+    format: 'jwk',
+  });
+
+  const signingInput = `${evidence.protected}.${evidence.payload}`;
+  const signature = Buffer.from(evidence.signature, 'base64url');
+  const verified = crypto.verify(
+    'sha256',
+    Buffer.from(signingInput, 'utf8'),
+    { key: publicKey, dsaEncoding: 'ieee-p1363' },
+    signature,
+  );
+  if (!verified) throw new Error('Signature did not verify');
+
+  const payload = JSON.parse(
+    Buffer.from(evidence.payload, 'base64url').toString('utf8'),
+  );
+  if (payload.schema !== 'attesso.evidence.v1') {
+    throw new Error('Unexpected evidence schema');
+  }
+  return payload;
+}
+```
+
+Fetch the JWKS from `GET /.well-known/jwks.json` (no API key required). The `dsaEncoding: 'ieee-p1363'` option is required — Node defaults to DER, but Attesso signs with raw `R || S`.
+
+## Go verification (stdlib only)
+
+```go
+package main
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"math/big"
+	"os"
+)
+
+type envelope struct {
+	Format    string `json:"format"`
+	Protected string `json:"protected"`
+	Payload   string `json:"payload"`
+	Signature string `json:"signature"`
 }
 
-const header = JSON.parse(
-  Buffer.from(envelope.protected, 'base64url').toString('utf8'),
-);
-if (header.alg !== 'ES256' || typeof header.kid !== 'string') {
-  throw new Error('Unexpected evidence header');
+type jwk struct {
+	Kty string `json:"kty"`
+	Crv string `json:"crv"`
+	Use string `json:"use"`
+	Alg string `json:"alg"`
+	Kid string `json:"kid"`
+	X   string `json:"x"`
+	Y   string `json:"y"`
 }
 
-const jwksResponse = await fetch(`${attessoApiUrl}/.well-known/jwks.json`);
-if (!jwksResponse.ok) throw new Error('JWKS retrieval failed');
-const jwks = await jwksResponse.json();
-const jwk = jwks.keys.find(
-  (candidate: Record<string, unknown>) =>
-    candidate.kid === header.kid &&
-    candidate.kty === 'EC' &&
-    candidate.crv === 'P-256' &&
-    candidate.use === 'sig' &&
-    candidate.alg === 'ES256',
-);
-if (!jwk) throw new Error('Evidence key not found');
-
-const key = await importJWK(jwk, 'ES256');
-const verified = await flattenedVerify(
-  {
-    protected: envelope.protected,
-    payload: envelope.payload,
-    signature: envelope.signature,
-  },
-  key,
-  { algorithms: ['ES256'] },
-);
-
-const evidence = JSON.parse(Buffer.from(verified.payload).toString('utf8'));
-if (evidence.schema !== 'attesso.evidence.v1') {
-  throw new Error('Unexpected evidence schema');
+type keySet struct {
+	Keys []jwk `json:"keys"`
 }
+
+func main() {
+	// evidence.json is the GET /v1/mandates/{id}/evidence response.
+	// jwks.json is the GET /.well-known/jwks.json response.
+	evidence := readEnvelope(os.Args[1])
+	keys := readKeySet(os.Args[2])
+
+	var header struct {
+		Alg string `json:"alg"`
+		Kid string `json:"kid"`
+	}
+	hb, _ := base64.RawURLEncoding.DecodeString(evidence.Protected)
+	if err := json.Unmarshal(hb, &header); err != nil {
+		fatal(err)
+	}
+	if header.Alg != "ES256" {
+		fatal(fmt.Errorf("unexpected alg %q", header.Alg))
+	}
+
+	var key *jwk
+	for i := range keys.Keys {
+		if keys.Keys[i].Kid == header.Kid {
+			key = &keys.Keys[i]
+			break
+		}
+	}
+	if key == nil || key.Kty != "EC" || key.Crv != "P-256" {
+		fatal(fmt.Errorf("evidence key not found"))
+	}
+
+	xb, _ := base64.RawURLEncoding.DecodeString(key.X)
+	yb, _ := base64.RawURLEncoding.DecodeString(key.Y)
+	pub := &ecdsa.PublicKey{
+		Curve: elliptic.P256(),
+		X:     new(big.Int).SetBytes(xb),
+		Y:     new(big.Int).SetBytes(yb),
+	}
+
+	sig, _ := base64.RawURLEncoding.DecodeString(evidence.Signature)
+	if len(sig) != 64 {
+		fatal(fmt.Errorf("signature must be 64 bytes"))
+	}
+	signingInput := evidence.Protected + "." + evidence.Payload
+	digest := sha256.Sum256([]byte(signingInput))
+	r := new(big.Int).SetBytes(sig[:32])
+	s := new(big.Int).SetBytes(sig[32:])
+	if !ecdsa.Verify(pub, digest[:], r, s) {
+		fatal(fmt.Errorf("signature did not verify"))
+	}
+
+	payload, _ := base64.RawURLEncoding.DecodeString(evidence.Payload)
+	fmt.Printf("OK: evidence verified\n%s\n", payload)
+}
+
+func readEnvelope(path string) envelope {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		fatal(err)
+	}
+	var e envelope
+	if err := json.Unmarshal(b, &e); err != nil {
+		fatal(err)
+	}
+	return e
+}
+
+func readKeySet(path string) keySet {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		fatal(err)
+	}
+	var ks keySet
+	if err := json.Unmarshal(b, &ks); err != nil {
+		fatal(err)
+	}
+	return ks
+}
+
+func fatal(err error) {
+	fmt.Fprintln(os.Stderr, "FAILED: "+err.Error())
+	os.Exit(1)
+}
+```
+
+## Python verification (stdlib + `cryptography`)
+
+```python
+import base64
+import json
+import sys
+
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec, utils
+
+
+def verify_evidence(evidence_path, jwks_path):
+    with open(evidence_path) as f:
+        evidence = json.load(f)
+    with open(jwks_path) as f:
+        jwks = json.load(f)
+
+    if evidence["format"] != "attesso.evidence.v1":
+        raise ValueError("unexpected evidence format")
+
+    header = json.loads(
+        base64.urlsafe_b64decode(evidence["protected"] + "==")
+    )
+    if header["alg"] != "ES256":
+        raise ValueError("unexpected alg")
+
+    key = next(
+        k for k in jwks["keys"]
+        if k["kid"] == header["kid"]
+        and k["kty"] == "EC"
+        and k["crv"] == "P-256"
+        and k["use"] == "sig"
+        and k["alg"] == "ES256"
+    )
+
+    x = int.from_bytes(base64.urlsafe_b64decode(key["x"] + "=="), "big")
+    y = int.from_bytes(base64.urlsafe_b64decode(key["y"] + "=="), "big")
+    public_key = ec.EllipticCurvePublicNumbers(x, y, ec.SECP256R1()).public_key()
+
+    signing_input = f"{evidence['protected']}.{evidence['payload']}".encode()
+    signature = base64.urlsafe_b64decode(evidence["signature"] + "==")
+    r = int.from_bytes(signature[:32], "big")
+    s = int.from_bytes(signature[32:], "big")
+
+    public_key.verify(
+        utils.encode_dss_signature(r, s),
+        signing_input,
+        ec.ECDSA(hashes.SHA256()),
+    )
+
+    payload = json.loads(
+        base64.urlsafe_b64decode(evidence["payload"] + "==")
+    )
+    if payload["schema"] != "attesso.evidence.v1":
+        raise ValueError("unexpected evidence schema")
+    return payload
+
+
+if __name__ == "__main__":
+    print(verify_evidence(sys.argv[1], sys.argv[2]))
 ```
 
 ## What the signature covers
