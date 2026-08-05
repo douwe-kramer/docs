@@ -6,10 +6,10 @@ icon: "credit-card"
 
 Attesso is a **spending-control layer**. It authorizes a proposed action against a user-signed mandate and returns a decision with signed evidence. Attesso never moves money, holds cards, or connects to a payment account. You keep your own payment rail and bind each authorization to it.
 
-This guide covers the case where **you are the only party** — a single person or a small team — and your payment rail is a **personal card or a virtual credit card**. It works for two situations:
+This guide covers the case where **you are the only party**, a single person or a small team, and your payment rail is a **personal card or a virtual credit card**. It works for two situations:
 
-1. **Personal use** — you want an AI agent to spend *your own* money within bounds you approve, with proof.
-2. **Testing without a merchant account** — you are a developer and want to exercise a real card charge end-to-end without building a full PSP integration or opening a merchant account.
+1. **Personal use**: you want an AI agent to spend *your own* money within bounds you approve, with proof.
+2. **Testing without a merchant account**: you are a developer and want to exercise a real card charge end-to-end without building a full PSP integration or opening a merchant account.
 
 The pattern is identical to the [bind to your PSP](./bind-to-your-psp) guide. The only difference is that your "PSP" is a card you already have.
 
@@ -35,7 +35,7 @@ The pattern is identical to the [bind to your PSP](./bind-to-your-psp) guide. Th
 | **Your agent** | The software that spends on your behalf | Yes, it charges the card |
 | **Attesso** | Authorizes the action, signs evidence | **No, never** |
 
-## Step 1 — Create a bounded mandate
+## Step 1: Create a bounded mandate
 
 You define what your agent is allowed to do. Keep the bounds tight: a max amount, an allowed action, and a validity window.
 
@@ -62,11 +62,11 @@ Authorization: Bearer ***
 
 Amounts are in minor units (cents). The mandate starts in `PENDING_APPROVAL`.
 
-## Step 2 — Approve the mandate
+## Step 2: Approve the mandate
 
-Send yourself through the hosted approval session and approve the exact bounds with WebAuthn. A browser return is not approval evidence — wait for a server-side read to report `ACTIVE` or `SCHEDULED` before proceeding. See the [quickstart](../quickstart) for the full approval flow.
+Send yourself through the hosted approval session and approve the exact bounds with WebAuthn. A browser return is not approval evidence. Wait for a server-side read to report `ACTIVE` or `SCHEDULED` before proceeding. See the [quickstart](../quickstart) for the full approval flow.
 
-## Step 3 — Authorize a concrete action
+## Step 3: Authorize a concrete action
 
 Your agent asks Attesso whether a specific action is allowed:
 
@@ -100,9 +100,9 @@ Idempotency-Key: aut_<your-unique-key>
 
 Execute only when `can_execute` is exactly `true` and before `execute_before`. A `DENY` or `INDETERMINATE` means do not charge the card.
 
-## Step 4 — Charge your card
+## Step 4: Charge your card
 
-Now your agent performs the charge on the card you gave it. The request must be derived from the **same immutable proposed action** you sent to Attesso — never rebuild it from mutable UI or agent state.
+Now your agent performs the charge on the card you gave it. The request must be derived from the **same immutable proposed action** you sent to Attesso. Never rebuild it from mutable UI or agent state.
 
 ### Example: charge a virtual credit card
 
@@ -126,7 +126,7 @@ The card provider here plays the role of your PSP. Attesso never sees the card n
 
 The same pattern applies if your agent holds a personal debit or credit card through a card-issuing API. The card is just the rail; Attesso's role is unchanged.
 
-## Step 5 — Report finality
+## Step 5: Report finality
 
 After the card provider returns a definite result, close the loop.
 
@@ -158,7 +158,7 @@ Idempotency-Key: cancel_<your-unique-key>
 
 ## If the card provider times out
 
-A timeout is **not** proof the charge did not happen. Reconcile before committing or canceling — query the card provider by your `external_action_reference`. See the [reconciliation guide](./reconcile-authorizations) for the exact decision table. Never charge twice while the outcome is ambiguous.
+A timeout is **not** proof the charge did not happen. Reconcile before committing or canceling. Query the card provider by your `external_action_reference`. See the [reconciliation guide](./reconcile-authorizations) for the exact decision table. Never charge twice while the outcome is ambiguous.
 
 ## Testing without a merchant account
 
@@ -170,7 +170,7 @@ If you are a developer who wants to exercise a real card charge without building
 4. The charge hits the virtual card; you see the full authorize → execute → commit lifecycle with real evidence.
 5. Delete the virtual card when done.
 
-This is the same pattern as the [quickstart](../quickstart) emulator, but with a real card instead of `emu_` — so you validate the actual charge path without opening a merchant account or integrating a full PSP.
+This is the same pattern as the [quickstart](../quickstart) emulator, but with a real card instead of `emu_`, so you validate the actual charge path without opening a merchant account or integrating a full PSP.
 
 ## Personal use: is this for you?
 
@@ -188,7 +188,7 @@ Attesso does not execute payments, issue cards, hold payment credentials, or con
 
 ## Next steps
 
-- [Quickstart](../quickstart) — the full test loop with an emulator.
-- [Bind to your PSP](./bind-to-your-psp) — the same pattern with Stripe, Adyen, or any provider.
-- [Reconcile outcomes](./reconcile-authorizations) — handle timeouts and ambiguous results safely.
-- [Verify evidence](./verify-evidence) — check a signed bundle yourself, without trusting Attesso.
+- [Quickstart](../quickstart): the full test loop with an emulator.
+- [Bind to your PSP](./bind-to-your-psp): the same pattern with Stripe, Adyen, or any provider.
+- [Reconcile outcomes](./reconcile-authorizations): handle timeouts and ambiguous results safely.
+- [Verify evidence](./verify-evidence): check a signed bundle yourself, without trusting Attesso.

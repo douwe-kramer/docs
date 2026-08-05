@@ -13,10 +13,10 @@ Before an approval session can be opened, register your identity provider in the
 | Field | What to provide |
 | --- | --- |
 | Identity issuer | An HTTPS URL that exactly matches the `iss` claim on the assertion you sign |
-| Exact return origin | Where the browser returns after the passkey ceremony — a **bare origin** (scheme + host + optional port, **no path, no query**, no fragment) |
+| Exact return origin | Where the browser returns after the passkey ceremony: a **bare origin** (scheme + host + optional port, **no path, no query**, no fragment) |
 | ES256 public JWKs | One or two `ES256`/`P-256` public JSON Web Keys (no private `d` value) |
 
-Return to the origin you registered exactly: `https://app.example.com` is allowed, and so is `https://app.example.com/approval-return` — only the origin (scheme + host + port) is compared, so a path is fine.
+Return to the origin you registered exactly: `https://app.example.com` is allowed, and so is `https://app.example.com/approval-return`. Only the origin (scheme + host + port) is compared, so a path is fine.
 
 Generate an ES256/P-256 key pair on your own infrastructure and register only its public key:
 

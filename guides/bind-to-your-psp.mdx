@@ -4,7 +4,7 @@ description: "Take an ALLOW from Attesso and execute it on your own payment prov
 icon: "plug"
 ---
 
-Attesso is a **spending-control layer**. It authorizes a proposed action against a user-signed mandate and returns a decision with signed evidence. Attesso never moves money, holds cards, or connects to your payment account — you keep your existing PSP (Stripe, Adyen, Wallester, Airwallex, or any other) and bind each Attesso authorization to an action on that rail.
+Attesso is a **spending-control layer**. It authorizes a proposed action against a user-signed mandate and returns a decision with signed evidence. Attesso never moves money, holds cards, or connects to your payment account. You keep your existing PSP (Stripe, Adyen, Wallester, Airwallex, or any other) and bind each Attesso authorization to an action on that rail.
 
 This guide shows the exact pattern for taking an `ALLOW` from Attesso and executing it against your own PSP. The pattern is the same for every provider: **authorize first, execute second, then report finality.**
 
@@ -21,10 +21,10 @@ This guide shows the exact pattern for taking an `ALLOW` from Attesso and execut
 
 Attesso is **PSP-agnostic**: it never needs to know which provider you use. You bind the authorization to your rail with two fields:
 
-- `external_action_reference` — your idempotency key for the PSP call.
-- `provider_transaction_reference` — the PSP's transaction/charge ID (on commit).
+- `external_action_reference`: your idempotency key for the PSP call.
+- `provider_transaction_reference`: the PSP's transaction/charge ID (on commit).
 
-## Step 1 — Authorize the proposed action
+## Step 1: Authorize the proposed action
 
 ```http
 POST /v1/mandates/{mandate_id}/authorizations
@@ -61,9 +61,9 @@ Idempotency-Key: aut_<your-unique-key>
 
 **Execute only when `can_execute` is exactly `true` and before `execute_before`.** A `DENY` or `INDETERMINATE` means do not call your PSP.
 
-## Step 2 — Execute on your PSP
+## Step 2: Execute on your PSP
 
-Now bind the `ALLOW` to a real action on your rail. The request you send to your PSP must be derived from the **same immutable proposed action** you sent to Attesso — never rebuild it from mutable UI or agent state.
+Now bind the `ALLOW` to a real action on your rail. The request you send to your PSP must be derived from the **same immutable proposed action** you sent to Attesso. Never rebuild it from mutable UI or agent state.
 
 ### Stripe example
 
@@ -91,7 +91,7 @@ const response = await adyen.checkout.payments({
 // response.pspReference is your provider_transaction_reference
 ```
 
-## Step 3 — Report finality
+## Step 3: Report finality
 
 After the PSP returns a definite result, report it to Attesso. This is what closes the loop and produces the evidence.
 
@@ -125,10 +125,10 @@ Idempotency-Key: cancel_<your-unique-key>
 
 - Use a **separate idempotency key per boundary**: one for the authorization, one for the PSP call, one for the commit/cancel.
 - Retries must reuse the same key **only when the operation and bytes are logically identical**. Never turn a changed operation into a retry.
-- If the PSP call times out, **reconcile before committing or canceling** — a timeout is not proof the provider did nothing. See the [reconciliation guide](./reconcile-authorizations).
+- If the PSP call times out, **reconcile before committing or canceling**: a timeout is not proof the provider did nothing. See the [reconciliation guide](./reconcile-authorizations).
 
 ## What this buys you
 
 - **Spending control**: the agent cannot exceed the user-signed bounds.
-- **Verifiable evidence**: the signed bundle proves the user approved the exact mandate and the agent stayed inside it — anyone can verify it without trusting Attesso (see [verify evidence](./verify-evidence)).
+- **Verifiable evidence**: the signed bundle proves the user approved the exact mandate and the agent stayed inside it. Anyone can verify it without trusting Attesso (see [verify evidence](./verify-evidence)).
 - **No float, no license, no provider-adapter matrix**: you keep your PSP, your funds, and your compliance responsibility.

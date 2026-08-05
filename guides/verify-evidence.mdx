@@ -78,7 +78,7 @@ async function verifyEvidence(evidence, jwks) {
 }
 ```
 
-Fetch the JWKS from `GET /.well-known/jwks.json` (no API key required). The `dsaEncoding: 'ieee-p1363'` option is required — Node defaults to DER, but Attesso signs with raw `R || S`.
+Fetch the JWKS from `GET /.well-known/jwks.json` (no API key required). The `dsaEncoding: 'ieee-p1363'` option is required: Node defaults to DER, but Attesso signs with raw `R || S`.
 
 ## Go verification (stdlib only)
 

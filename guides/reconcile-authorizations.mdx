@@ -1,6 +1,6 @@
 ---
 title: "Reconcile authorization outcomes"
-description: "A decision table for the async case — when to commit, cancel, or quarantine."
+description: "A decision table for the async case: when to commit, cancel, or quarantine."
 icon: "scale"
 ---
 
@@ -21,9 +21,9 @@ An Attesso authorization is a **reservation**, not proof that execution happened
 | **Provider returned success** (charge/booking accepted) | Definite acceptance | **Commit** with `provider_transaction_reference` |
 | **Provider returned explicit rejection** (declined, invalid, refused) | Definite non-acceptance | **Cancel** with `reason: EXECUTOR_REJECTED` |
 | **Provider returned an error before acting** (validation, auth failure) | Definite non-acceptance | **Cancel** with `reason: EXECUTION_FAILED` |
-| **Network error / timeout** | **Ambiguous** — provider may have accepted | **Reconcile first.** Query the provider by your `external_action_reference`. Do NOT commit or cancel on a guess. |
-| **Provider returned success but you lost the response** | **Ambiguous** — you don't know if it was accepted | **Reconcile first.** Query the provider. |
-| **Provider returned an unknown/invalid response** | **Ambiguous** | **Reconcile first.** Fail closed — do not execute again. |
+| **Network error / timeout** | **Ambiguous**: provider may have accepted | **Reconcile first.** Query the provider by your `external_action_reference`. Do NOT commit or cancel on a guess. |
+| **Provider returned success but you lost the response** | **Ambiguous**: you don't know if it was accepted | **Reconcile first.** Query the provider. |
+| **Provider returned an unknown/invalid response** | **Ambiguous** | **Reconcile first.** Fail closed: do not execute again. |
 | **You aborted before calling the provider** | Definite non-execution | **Cancel** with `reason: INTEGRATOR_ABORTED` |
 | **Security event** (suspected compromise) | Definite stop | **Cancel** with `reason: SECURITY_EVENT` |
 
@@ -46,7 +46,7 @@ If you cannot determine the outcome (provider unreachable, still processing, or 
 - Keep the reservation until the provider is reachable or the `execute_before` deadline passes.
 - Do not release the authority or retry the action.
 - Reconcile again once the provider responds.
-- If the deadline passes with no resolution, the reservation expires on its own — but you must still reconcile the provider outcome before treating the action as definitively done or not done.
+- If the deadline passes with no resolution, the reservation expires on its own, but you must still reconcile the provider outcome before treating the action as definitively done or not done.
 
 ## Why this matters
 
@@ -58,7 +58,7 @@ If you cannot determine the outcome (provider unreachable, still processing, or 
 
 When you cancel, you assert how the external capability now stands:
 
-- `NEVER_BECAME_POSSIBLE` — the action could never have executed (e.g. you aborted before calling the provider).
-- `NO_LONGER_POSSIBLE` — the action could have executed but no longer can (e.g. the provider rejected it, or the credential is spent).
+- `NEVER_BECAME_POSSIBLE`: the action could never have executed (e.g. you aborted before calling the provider).
+- `NO_LONGER_POSSIBLE`: the action could have executed but no longer can (e.g. the provider rejected it, or the credential is spent).
 
 Choose the disposition that matches the truth. It is part of the signed evidence.
