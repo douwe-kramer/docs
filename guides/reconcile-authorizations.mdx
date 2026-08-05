@@ -24,7 +24,7 @@ An Attesso authorization is a **reservation**, not proof that execution happened
 | **Network error / timeout** | **Ambiguous** — provider may have accepted | **Reconcile first.** Query the provider by your `external_action_reference`. Do NOT commit or cancel on a guess. |
 | **Provider returned success but you lost the response** | **Ambiguous** — you don't know if it was accepted | **Reconcile first.** Query the provider. |
 | **Provider returned an unknown/invalid response** | **Ambiguous** | **Reconcile first.** Fail closed — do not execute again. |
-| **You aborted before calling the provider** | Definite non-execution | **Cancel** with `reason: COMPANYX_ABORTED` |
+| **You aborted before calling the provider** | Definite non-execution | **Cancel** with `reason: INTEGRATOR_ABORTED` |
 | **Security event** (suspected compromise) | Definite stop | **Cancel** with `reason: SECURITY_EVENT` |
 
 ## Reconciliation procedure

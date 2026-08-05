@@ -1,9 +1,9 @@
 ---
 title: Generic executor integration
-description: Attesso authorizes; CompanyX executes. A guide for any external API, queue, worker, or manual executor.
+description: Attesso authorizes; the integrator executes. A guide for any external API, queue, worker, or manual executor.
 ---
 
-Attesso authorizes; CompanyX executes. This guide applies to any external API,
+Attesso authorizes; the integrator executes. This guide applies to any external API,
 queue, worker, or manual executor.
 
 Use `https://api-staging.attesso.com` with an `att_test_` key for the free test
@@ -14,7 +14,7 @@ entitlement.
 
 ## Required loop
 
-1. Create an immutable Mandate with a CompanyX subject reference, an external
+1. Create an immutable Mandate with a integrator subject reference, an external
    reference, structured policy, approval deadline, and validity window.
 2. Send the authenticated End User through one short-lived hosted approval
    session.
@@ -25,7 +25,7 @@ entitlement.
 7. Commit only after definite acceptance; cancel only after definite
    non-acceptance.
 8. Reconcile ambiguous executor results before committing or canceling.
-9. Verify and retain the Attesso evidence bundle under CompanyX's own retention
+9. Verify and retain the Attesso evidence bundle under the integrator's own retention
    policy.
 
 ## Binding rules
@@ -40,7 +40,7 @@ Use separate identifiers for separate boundaries:
 | --- | --- |
 | Mandate creation | one Attesso idempotency key per logical Mandate |
 | Authorization creation | one Attesso idempotency key per exact Proposed Action |
-| Executor call | one CompanyX external reference/idempotency key |
+| Executor call | one the integrator external reference/idempotency key |
 | Commit/cancel | one Attesso idempotency key per finality operation |
 
 Retries must reuse the same key only when the operation and bytes are logically
@@ -53,7 +53,7 @@ the same. Never turn a changed operation into a retry.
 - network error, timeout, invalid response, or unknown state: fail closed and do
   not call the executor.
 
-An Authorization is a reservation, not proof that execution happened. CompanyX
+An Authorization is a reservation, not proof that execution happened. The integrator
 must still report finality:
 
 - **commit** after the executor accepted the action;
@@ -62,7 +62,7 @@ must still report finality:
 
 ## Secrets and data
 
-Keep Attesso keys and executor credentials only on CompanyX's server. Do not send
+Keep Attesso keys and executor credentials only on the integrator's server. Do not send
 payment credentials, provider secrets, identity-signing private keys, or passkey
 material to Attesso. Evidence may contain references and policy facts, so avoid
 putting credentials or unnecessary personal data in free-form references.
@@ -71,7 +71,7 @@ putting credentials or unnecessary personal data in free-form references.
 
 The free test environment must cover allow, deny, expired approval, executor
 rejection, executor timeout/reconciliation, duplicate retry, commit replay, and
-cancel replay. Move to live only after billing is linked and the same CompanyX
+cancel replay. Move to live only after billing is linked and the same the integrator
 executor path has passed those cases.
 
 Only the first live transition from `PENDING_APPROVAL` to `ACTIVE` or
@@ -81,5 +81,5 @@ duplicate, retried, and test activity is free. A sub-minimum Stripe invoice may
 carry forward. A Checkout return is never proof of active billing.
 
 Attesso does not execute payments or other external actions, issue cards, hold
-payment credentials, or connect to CompanyX's payment account. Public support is
+payment credentials, or connect to the integrator's payment account. Public support is
 available only at `info@attesso.com`.
