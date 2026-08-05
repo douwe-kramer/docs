@@ -64,7 +64,7 @@ Amounts are in minor units (cents). The mandate starts in `PENDING_APPROVAL`.
 
 ## Step 2 — Approve the mandate
 
-Send yourself through the hosted approval session and approve the exact bounds with WebAuthn. A browser return is not approval evidence — wait for a server-side read to report `ACTIVE` or `SCHEDULED` before proceeding. See the [quickstart](./quickstart) for the full approval flow.
+Send yourself through the hosted approval session and approve the exact bounds with WebAuthn. A browser return is not approval evidence — wait for a server-side read to report `ACTIVE` or `SCHEDULED` before proceeding. See the [quickstart](../quickstart) for the full approval flow.
 
 ## Step 3 — Authorize a concrete action
 
@@ -170,7 +170,7 @@ If you are a developer who wants to exercise a real card charge without building
 4. The charge hits the virtual card; you see the full authorize → execute → commit lifecycle with real evidence.
 5. Delete the virtual card when done.
 
-This is the same pattern as the [quickstart](./quickstart) emulator, but with a real card instead of `emu_` — so you validate the actual charge path without opening a merchant account or integrating a full PSP.
+This is the same pattern as the [quickstart](../quickstart) emulator, but with a real card instead of `emu_` — so you validate the actual charge path without opening a merchant account or integrating a full PSP.
 
 ## Personal use: is this for you?
 
@@ -188,7 +188,7 @@ Attesso does not execute payments, issue cards, hold payment credentials, or con
 
 ## Next steps
 
-- [Quickstart](./quickstart) — the full test loop with an emulator.
+- [Quickstart](../quickstart) — the full test loop with an emulator.
 - [Bind to your PSP](./bind-to-your-psp) — the same pattern with Stripe, Adyen, or any provider.
 - [Reconcile outcomes](./reconcile-authorizations) — handle timeouts and ambiguous results safely.
 - [Verify evidence](./verify-evidence) — check a signed bundle yourself, without trusting Attesso.
