@@ -14,7 +14,7 @@ entitlement.
 
 ## Required loop
 
-1. Create an immutable Mandate with a integrator subject reference, an external
+1. Create an immutable Mandate with an integrator subject reference, an external
    reference, structured policy, approval deadline, and validity window.
 2. Send the authenticated End User through one short-lived hosted approval
    session.
@@ -40,7 +40,7 @@ Use separate identifiers for separate boundaries:
 | --- | --- |
 | Mandate creation | one Attesso idempotency key per logical Mandate |
 | Authorization creation | one Attesso idempotency key per exact Proposed Action |
-| Executor call | one the integrator external reference/idempotency key |
+| Executor call | one integrator external reference/idempotency key |
 | Commit/cancel | one Attesso idempotency key per finality operation |
 
 Retries must reuse the same key only when the operation and bytes are logically
@@ -71,7 +71,7 @@ putting credentials or unnecessary personal data in free-form references.
 
 The free test environment must cover allow, deny, expired approval, executor
 rejection, executor timeout/reconciliation, duplicate retry, commit replay, and
-cancel replay. Move to live only after billing is linked and the same the integrator
+cancel replay. Move to live only after billing is linked and the same integrator
 executor path has passed those cases.
 
 Only the first live transition from `PENDING_APPROVAL` to `ACTIVE` or
