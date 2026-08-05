@@ -9,15 +9,6 @@
   },
   "favicon": "/favicon-32.png",
   "navigation": {
-    "pages": [
-      {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      }
-    ],
     "global": {
       "anchors": [
         {
@@ -57,6 +48,7 @@
           "guides/hosted-approval",
           "guides/complete-an-authorization",
           "guides/bind-to-your-psp",
+          "guides/use-your-own-card",
           "guides/reconcile-authorizations",
           "guides/generic-executor",
           "guides/stripe-setup",

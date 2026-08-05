@@ -1,0 +1,194 @@
+---
+title: "Use Attesso with your own card"
+description: "Personal use or testing with a virtual card, no merchant account needed."
+icon: "credit-card"
+---
+
+Attesso is a **spending-control layer**. It authorizes a proposed action against a user-signed mandate and returns a decision with signed evidence. Attesso never moves money, holds cards, or connects to a payment account. You keep your own payment rail and bind each authorization to it.
+
+This guide covers the case where **you are the only party** — a single person or a small team — and your payment rail is a **personal card or a virtual credit card**. It works for two situations:
+
+1. **Personal use** — you want an AI agent to spend *your own* money within bounds you approve, with proof.
+2. **Testing without a merchant account** — you are a developer and want to exercise a real card charge end-to-end without building a full PSP integration or opening a merchant account.
+
+The pattern is identical to the [bind to your PSP](./bind-to-your-psp) guide. The only difference is that your "PSP" is a card you already have.
+
+## The core idea
+
+```text
+1. You create a bounded mandate: "my agent may spend up to EUR 250 on travel."
+2. You approve it with WebAuthn.
+3. Your agent finds a concrete action (e.g. "book flight, EUR 240, KLM").
+4. Your agent calls Attesso: POST /v1/mandates/{id}/authorizations -> ALLOW.
+5. If can_execute is true, your agent charges YOUR card.
+6. Your agent reports finality: commit (accepted) or cancel (rejected).
+7. Attesso signs the evidence of the whole lifecycle.
+```
+
+**The card goes to your agent, never to Attesso.** Attesso only decides whether the action is allowed. Your agent holds the card and performs the charge. This keeps Attesso out of PCI scope and out of the money movement entirely.
+
+## Who is who
+
+| Role | In this guide | Holds the card? |
+| --- | --- | --- |
+| **You** | The person whose money is spent | Yes, or you create a virtual card |
+| **Your agent** | The software that spends on your behalf | Yes, it charges the card |
+| **Attesso** | Authorizes the action, signs evidence | **No, never** |
+
+## Step 1 — Create a bounded mandate
+
+You define what your agent is allowed to do. Keep the bounds tight: a max amount, an allowed action, and a validity window.
+
+```http
+POST /v1/mandates
+Authorization: Bearer ***
+
+{
+  "subject_reference": "user_me",
+  "external_reference": "travel_2026_08_05",
+  "policy": {
+    "version": "1",
+    "action": "flight.book",
+    "constraints": [
+      { "path": "payment.currency", "operator": "eq", "value": "EUR" },
+      { "path": "payment.amount", "operator": "max", "value": 25000 }
+    ]
+  },
+  "approval_deadline": "2026-08-05T12:00:00Z",
+  "valid_from": "2026-08-05T00:00:00Z",
+  "valid_until": "2026-08-06T00:00:00Z"
+}
+```
+
+Amounts are in minor units (cents). The mandate starts in `PENDING_APPROVAL`.
+
+## Step 2 — Approve the mandate
+
+Send yourself through the hosted approval session and approve the exact bounds with WebAuthn. A browser return is not approval evidence — wait for a server-side read to report `ACTIVE` or `SCHEDULED` before proceeding. See the [quickstart](./quickstart) for the full approval flow.
+
+## Step 3 — Authorize a concrete action
+
+Your agent asks Attesso whether a specific action is allowed:
+
+```http
+POST /v1/mandates/{mandate_id}/authorizations
+Authorization: Bearer ***
+Idempotency-Key: aut_<your-unique-key>
+
+{
+  "external_reference": "booking-2026-08-05-001",
+  "proposed_action": {
+    "action": "flight.book",
+    "attributes": { "route": "AMS-NYC", "cabin": "economy" },
+    "payment": { "amount": 24000, "currency": "EUR" }
+  },
+  "execution_window_seconds": 300
+}
+```
+
+**Response (ALLOW):**
+
+```json
+{
+  "id": "aut_01J2...",
+  "decision": "ALLOW",
+  "state": "RESERVED",
+  "can_execute": true,
+  "execute_before": "2026-08-05T12:05:00Z"
+}
+```
+
+Execute only when `can_execute` is exactly `true` and before `execute_before`. A `DENY` or `INDETERMINATE` means do not charge the card.
+
+## Step 4 — Charge your card
+
+Now your agent performs the charge on the card you gave it. The request must be derived from the **same immutable proposed action** you sent to Attesso — never rebuild it from mutable UI or agent state.
+
+### Example: charge a virtual credit card
+
+A virtual credit card is a single-use or limited card you create in an app such as Revolut, Monzo, or your bank. It is ideal for a one-off test charge or for giving your agent a bounded spending surface.
+
+```js
+// Your agent calls its card-issuing provider to charge the virtual card.
+// The exact API depends on your provider; the shape is the same:
+const charge = await cardProvider.charges.create({
+  amount: 24000,            // minor units, matches proposed_action.payment
+  currency: 'eur',
+  card: vcard_...,          // the virtual card you created and gave to your agent
+  idempotencyKey: 'booking-2026-08-05-001', // your external_action_reference
+});
+// charge.id is your provider_transaction_reference
+```
+
+The card provider here plays the role of your PSP. Attesso never sees the card number or the charge.
+
+### Example: charge a personal card
+
+The same pattern applies if your agent holds a personal debit or credit card through a card-issuing API. The card is just the rail; Attesso's role is unchanged.
+
+## Step 5 — Report finality
+
+After the card provider returns a definite result, close the loop.
+
+### Commit (the charge was accepted)
+
+```http
+POST /v1/authorizations/{authorization_id}/commit
+Idempotency-Key: commit_<your-unique-key>
+
+{
+  "external_action_reference": "booking-2026-08-05-001",
+  "provider_transaction_reference": "ch_3N...",
+  "reported_accepted_at": "2026-08-05T12:04:30Z"
+}
+```
+
+### Cancel (the charge was declined, or you aborted)
+
+```http
+POST /v1/authorizations/{authorization_id}/cancellation
+Idempotency-Key: cancel_<your-unique-key>
+
+{
+  "reason": "EXECUTOR_REJECTED",
+  "execution_disposition": "NO_LONGER_POSSIBLE",
+  "external_credential_reference": "vcard_3N..."
+}
+```
+
+## If the card provider times out
+
+A timeout is **not** proof the charge did not happen. Reconcile before committing or canceling — query the card provider by your `external_action_reference`. See the [reconciliation guide](./reconcile-authorizations) for the exact decision table. Never charge twice while the outcome is ambiguous.
+
+## Testing without a merchant account
+
+If you are a developer who wants to exercise a real card charge without building a full PSP integration, a virtual card is the fastest path:
+
+1. Create a temporary virtual card in Revolut (or similar) with a small limit.
+2. Give the virtual card to your agent as its payment rail.
+3. Run the loop above against the **free test environment** (`att_test_` key).
+4. The charge hits the virtual card; you see the full authorize → execute → commit lifecycle with real evidence.
+5. Delete the virtual card when done.
+
+This is the same pattern as the [quickstart](./quickstart) emulator, but with a real card instead of `emu_` — so you validate the actual charge path without opening a merchant account or integrating a full PSP.
+
+## Personal use: is this for you?
+
+Yes, if you want an AI agent to spend your money with your explicit approval and a verifiable record. The flow is the same as any other Attesso integration:
+
+- **You** define the bounds and approve them.
+- **Your agent** spends within those bounds.
+- **Attesso** proves the agent stayed inside them and signs the evidence.
+
+You can self-host Attesso or use the hosted service. Test is free; a live mandate's first approval costs $0.35 USD. See [pricing](https://www.attesso.com/pricing) for the billing model.
+
+## What Attesso does not do
+
+Attesso does not execute payments, issue cards, hold payment credentials, or connect to your card account. It never sees your card number. It only authorizes the action and produces evidence. You keep your card, your funds, and your compliance responsibility.
+
+## Next steps
+
+- [Quickstart](./quickstart) — the full test loop with an emulator.
+- [Bind to your PSP](./bind-to-your-psp) — the same pattern with Stripe, Adyen, or any provider.
+- [Reconcile outcomes](./reconcile-authorizations) — handle timeouts and ambiguous results safely.
+- [Verify evidence](./verify-evidence) — check a signed bundle yourself, without trusting Attesso.
