@@ -25,9 +25,11 @@ entitlement.
 6. Send the accepted action to the executor with its own stable idempotency key.
 7. Commit only after definite acceptance; cancel only after definite
    non-acceptance.
-8. Reconcile ambiguous executor results before committing or canceling.
+8. Reconcile ambiguous executor results before committing or canceling. See the
+   [reconciliation decision table](./reconcile-authorizations) for the exact
+   action per outcome.
 9. Verify and retain the Attesso evidence bundle under the integrator's own retention
-   policy.
+   policy. See [verify evidence](./verify-evidence) to check a bundle yourself.
 
 ## Binding rules
 
@@ -60,6 +62,10 @@ must still report finality:
 - **commit** after the executor accepted the action;
 - **cancel** after definite non-acceptance;
 - **reconcile first** after an ambiguous result.
+
+To execute an `ALLOW` against your own payment provider, see
+[bind an authorization to your PSP](./bind-to-your-psp). For the exact decision
+table on ambiguous outcomes, see [reconcile authorization outcomes](./reconcile-authorizations).
 
 ## Secrets and data
 

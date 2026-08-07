@@ -39,6 +39,9 @@ Content-Type: application/json
 
 A successful commit atomically changes the Authorization to `COMMITTED` and its Mandate to `CONSUMED`.
 
+For the full pattern of taking an `ALLOW` and executing it on your own payment
+provider, see [bind an authorization to your PSP](./bind-to-your-psp).
+
 ## Cancel only when execution is impossible
 
 Disable every external card, token, job, or provider capability before calling the cancellation endpoint.
@@ -69,3 +72,6 @@ Use `NEVER_BECAME_POSSIBLE` only when no external capability was ever usable.
     A committed, cancelled, or expired Authorization cannot transition again.
   </Step>
 </Steps>
+
+When the outcome is ambiguous, follow the [reconciliation decision table](./reconcile-authorizations)
+before committing or canceling — a timeout is not proof the provider did nothing.
