@@ -35,6 +35,21 @@ The pattern is identical to the [bind to your PSP](./bind-to-your-psp) guide. Th
 | **Your agent** | The software that spends on your behalf | Yes, it charges the card |
 | **Attesso** | Authorizes the action, signs evidence | **No, never** |
 
+## The no-code route: approve in the dashboard
+
+If you are the only party, you do not need to build the mandate and approval calls yourself. The dashboard does them for you:
+
+1. Sign in to the [dashboard](https://www.attesso.com/dashboard) and create or select your Organization.
+2. In the Test or Live section, open **Personal card limits**.
+3. Set the bounds: what the agent may do (for example `card.charge`), the maximum amount, the currency, and how many days the mandate stays valid.
+4. Click **Create and approve with passkey** and approve the exact bounds with WebAuthn.
+
+The mandate becomes `ACTIVE` (or `SCHEDULED`) with no keys to generate, no assertions to sign, and no command line. Test approvals are free. Live requires an active subscription, and the first approval of a live mandate costs $0.35 USD.
+
+Your agent still calls the authorization API when it wants to act, authenticated with an API key from the same dashboard section. Skip to [Step 3](#step-3-authorize-a-concrete-action).
+
+The steps below are the API route. Use them for your own integration, or when your agent software creates mandates itself.
+
 ## Step 1: Create a bounded mandate
 
 You define what your agent is allowed to do. Keep the bounds tight: a max amount, an allowed action, and a validity window.
@@ -174,7 +189,7 @@ This is the same pattern as the [quickstart](../quickstart) emulator, but with a
 
 ## Personal use: is this for you?
 
-Yes, if you want an AI agent to spend your money with your explicit approval and a verifiable record. The flow is the same as any other Attesso integration:
+Yes, if you want an AI agent to spend your money with your explicit approval and a verifiable record. Start with the dashboard route above; it needs no integration. Create an API key in the dashboard when your agent software is ready to call the authorization API. The flow is then the same as any other Attesso integration:
 
 - **You** define the bounds and approve them.
 - **Your agent** spends within those bounds.
