@@ -23,8 +23,11 @@ Generate an ES256/P-256 key pair on your own infrastructure and register only it
 ```sh
 # Private key (keep server-side, never share)
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
+  -pkeyopt ec_param_enc:named_curve \
   -out identity.pem
 ```
+
+`ec_param_enc:named_curve` is not optional. Without it, OpenSSL 3.x writes the curve as explicit parameters, and Go's `crypto/x509` (and some other standard libraries) cannot parse the resulting file at all. The key is still valid; it is just unreadable to a large share of stacks.
 
 Derive the public JWK from that PEM with the same `jose` tooling used to sign assertions (see below):
 
@@ -116,6 +119,87 @@ identity_assertion = jwt.encode(
         "kid": os.environ["IDENTITY_KEY_ID"],
     },
 )
+```
+
+## Go
+
+Standard library only. `ecdsa.SignASN1` would produce DER, so sign the digest and
+write the 64-byte `R || S` form yourself; Attesso rejects a DER signature.
+
+```go
+package main
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"fmt"
+	"os"
+	"time"
+)
+
+func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
+
+func segment(v any) string {
+	encoded, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b64(encoded)
+}
+
+func main() {
+	raw, err := os.ReadFile(os.Getenv("IDENTITY_PRIVATE_KEY_PATH"))
+	if err != nil {
+		panic(err)
+	}
+	block, _ := pem.Decode(raw)
+	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		panic(err)
+	}
+	privateKey := key.(*ecdsa.PrivateKey)
+	if privateKey.Curve != elliptic.P256() {
+		panic("key must be P-256")
+	}
+
+	now := time.Now().Unix()
+	jti := make([]byte, 16)
+	if _, err := rand.Read(jti); err != nil {
+		panic(err)
+	}
+
+	header := segment(map[string]string{
+		"typ": "attesso-identity+jwt",
+		"alg": "ES256",
+		"kid": os.Getenv("IDENTITY_KEY_ID"),
+	})
+	payload := segment(map[string]any{
+		"iss": os.Getenv("IDENTITY_ISSUER"),
+		"sub": mandateSubjectReference,
+		"aud": "urn:attesso:approval:test:v1",
+		"iat": now,
+		"exp": now + 300,
+		"jti": b64(jti),
+	})
+
+	signingInput := header + "." + payload
+	digest := sha256.Sum256([]byte(signingInput))
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, digest[:])
+	if err != nil {
+		panic(err)
+	}
+	signature := make([]byte, 64)
+	r.FillBytes(signature[:32])
+	s.FillBytes(signature[32:])
+
+	fmt.Println(signingInput + "." + b64(signature))
+}
 ```
 
 ## Create and handle the session
