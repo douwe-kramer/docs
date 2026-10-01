@@ -27,6 +27,7 @@
 - Bold for UI elements: Click **Settings**
 - Code formatting for file names, commands, paths, and code references
 - Escape dollar signs in prose: write `\$0.25` for amounts. Unescaped paired `$` are parsed as LaTeX math and render as garbled text.
+- Frontmatter `description` is rendered as the page subtitle and copied raw into the meta tags: no escapes or entities there, use a single plain `$` at most.
 
 ## Content boundaries
 
