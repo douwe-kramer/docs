@@ -26,6 +26,7 @@
 - Use sentence case for headings
 - Bold for UI elements: Click **Settings**
 - Code formatting for file names, commands, paths, and code references
+- Escape dollar signs in prose: write `\$0.25` for amounts. Unescaped paired `$` are parsed as LaTeX math and render as garbled text.
 
 ## Content boundaries
 

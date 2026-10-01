@@ -1,6 +1,6 @@
 ---
 title: Stripe setup
-description: "Link Attesso's own Stripe Billing to enable live keys: 0.5% + $0.25 USD per authorized transaction (minimum $0.30, maximum $25), invoiced monthly."
+description: 'Link Attesso''s own Stripe Billing to enable live keys: 0.5% + \$0.25 USD per authorized transaction (minimum \$0.30, maximum \$25), invoiced monthly.'
 icon: "banknote"
 ---
 
@@ -25,9 +25,9 @@ The success redirect does not activate live access. Attesso verifies a signed
 Stripe webhook, retrieves current subscription state, and then persists the
 entitlement server-side.
 
-The V1 price is **0.5% + $0.25 USD per authorized transaction**: 0.5% of the
-Mandate's authorized amount plus $0.25, with a minimum of $0.30 and a maximum
-of $25, invoiced at
+The V1 price is **0.5% + \$0.25 USD per authorized transaction**: 0.5% of the
+Mandate's authorized amount plus \$0.25, with a minimum of \$0.30 and a maximum
+of \$25, invoiced at
 the end of the monthly subscription period. Applicable taxes are additional. Only
 the first transition from `PENDING_APPROVAL` to `ACTIVE` or `SCHEDULED` is
 billable. Failed, rejected, cancelled, expired, duplicate, retried, and test
