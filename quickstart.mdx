@@ -10,152 +10,38 @@ test environment. Use the test API at `https://api-staging.attesso.com` with an
 `att_test_` key. The live environment at `https://api.attesso.com` requires
 `att_live_` keys, which are enabled only after linking Stripe Billing.
 
-## Prerequisites
+## Run it end to end
 
-- An Attesso organization and test API key
-- Approval trust configured with your issuer, exact return origin, and ES256 public JWK
-- A backend that keeps both the Attesso API key and your identity-signing key secret
-- Node.js 22 or later for the shell helpers below
+One command goes from a test key to verified evidence on your own machine: it
+creates the Mandate, approves it in the browser with a passkey, shows one
+over-cap attempt refused, commits one in-cap action, and verifies the signed
+evidence locally. Node.js 20+, no dependencies.
+
+```zsh
+curl -O https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/quickstart.mjs
+node quickstart.mjs
+```
+
+First run: paste your `att_test_` key once and save the three printed
+approval-trust values in the dashboard once; every later run is zero-config.
 
 <Warning>
   Never expose an Attesso API key to a browser, end user, or agent.
 </Warning>
 
-## 1. Configure the test request
+## The five calls, if you assemble it yourself
 
-```zsh
-export ATTESSO_API_URL="https://api-staging.attesso.com"
-read -r -s "ATTESSO_API_KEY?Paste your att_test_ key: "
-export ATTESSO_API_KEY
+1. `POST /v1/mandates`: create the Mandate (`PENDING_APPROVAL`) with its policy, window, and approval deadline.
+2. `POST /v1/mandates/{id}/approval-sessions`: sign a short-lived identity
+   assertion and create the hosted approval session; send the browser to the
+   returned `approval_url`, then read the Mandate server-to-server until it is
+   `ACTIVE`. Claims and signing examples: [Hosted approval](/guides/hosted-approval).
+3. `POST /v1/mandates/{id}/authorizations`: authorize the concrete action;
+   continue only when `can_execute` is exactly `true`.
+4. `PUT /v1/authorizations/{id}/commit`: after your executor accepts the
+   action; the Authorization becomes `COMMITTED` and the Mandate `CONSUMED`.
+5. `GET /v1/mandates/{id}/evidence`: fetch the signed bundle and verify it
+   ([Verify evidence](/guides/verify-evidence)).
 
-export RUN_ID="$(node -e "console.log(require('node:crypto').randomUUID())")"
-export APPROVAL_DEADLINE="$(node -e "console.log(new Date(Date.now()+15*60*1000).toISOString())")"
-export VALID_FROM="$(node -e "console.log(new Date(Date.now()-60*1000).toISOString())")"
-export VALID_UNTIL="$(node -e "console.log(new Date(Date.now()+14*24*60*60*1000).toISOString())")"
-export DEPARTURE_DATE="$(node -e "console.log(new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10))")"
-```
-
-Use one idempotency key per logical write. Reuse it only when retrying the same operation with the same input.
-
-## 2. Create the Mandate
-
-```zsh
-MANDATE_RESPONSE="$(curl --fail-with-body --silent --show-error \
-  --request POST "$ATTESSO_API_URL/v1/mandates" \
-  --header "Authorization: Bearer $ATTESSO_API_KEY" \
-  --header "Content-Type: application/json" \
-  --header "Idempotency-Key: mandate.create.$RUN_ID" \
-  --data @- <<JSON
-{
-  "subject_reference": "user_$RUN_ID",
-  "external_reference": "trip_$RUN_ID",
-  "policy": {
-    "version": "1",
-    "action": "flight.book",
-    "constraints": [
-      { "path": "attributes.origin", "operator": "eq", "value": "AMS" },
-      { "path": "attributes.destination", "operator": "eq", "value": "LIS" },
-      {
-        "path": "attributes.departureDate",
-        "operator": "date_range",
-        "on_or_after": "$DEPARTURE_DATE",
-        "on_or_before": "$DEPARTURE_DATE"
-      },
-      { "path": "payment.amount", "operator": "max", "value": 15000 },
-      { "path": "payment.currency", "operator": "eq", "value": "EUR" }
-    ]
-  },
-  "approval_deadline": "$APPROVAL_DEADLINE",
-  "valid_from": "$VALID_FROM",
-  "valid_until": "$VALID_UNTIL"
-}
-JSON
-)"
-
-export MANDATE_ID="$(printf '%s' "$MANDATE_RESPONSE" | node -e \
-  'let v="";process.stdin.on("data",c=>v+=c).on("end",()=>process.stdout.write(JSON.parse(v).id))')"
-```
-
-The response must start in `PENDING_APPROVAL`.
-
-## 3. Collect hosted approval
-
-Create a short-lived identity assertion whose `sub` equals `user_$RUN_ID`. The [hosted approval guide](/guides/hosted-approval) includes TypeScript and Python signing examples.
-
-Read the assertion without putting it in shell history:
-
-```zsh
-read -r -s "IDENTITY_ASSERTION?Paste the short-lived identity assertion: "
-export IDENTITY_ASSERTION
-export RETURN_STATE="$(node -e "console.log(require('node:crypto').randomBytes(24).toString('base64url'))")"
-```
-
-Create the session from your backend:
-
-```zsh
-APPROVAL_RESPONSE="$(curl --fail-with-body --silent --show-error \
-  --request POST "$ATTESSO_API_URL/v1/mandates/$MANDATE_ID/approval-sessions" \
-  --header "Authorization: Bearer $ATTESSO_API_KEY" \
-  --header "Content-Type: application/json" \
-  --header "Idempotency-Key: approval.create.$RUN_ID" \
-  --data @- <<JSON
-{
-  "identity_assertion": "$IDENTITY_ASSERTION",
-  "return_url": "https://your-registered-origin.example/attesso/return",
-  "return_state": "$RETURN_STATE"
-}
-JSON
-)"
-```
-
-Redirect the authenticated browser to the returned `approval_url` without logging or storing it. After approval, retrieve the Mandate server-to-server and continue only when it is `ACTIVE`.
-
-## 4. Authorize the concrete action
-
-```zsh
-AUTHORIZATION_RESPONSE="$(curl --fail-with-body --silent --show-error \
-  --request POST "$ATTESSO_API_URL/v1/mandates/$MANDATE_ID/authorizations" \
-  --header "Authorization: Bearer $ATTESSO_API_KEY" \
-  --header "Content-Type: application/json" \
-  --header "Idempotency-Key: authorization.create.$RUN_ID" \
-  --data @- <<JSON
-{
-  "external_reference": "candidate_$RUN_ID",
-  "proposed_action": {
-    "action": "flight.book",
-    "attributes": {
-      "origin": "AMS",
-      "destination": "LIS",
-      "departureDate": "$DEPARTURE_DATE"
-    },
-    "payment": { "amount": 14200, "currency": "EUR" }
-  },
-  "execution_window_seconds": 300
-}
-JSON
-)"
-
-export AUTHORIZATION_ID="$(printf '%s' "$AUTHORIZATION_RESPONSE" | node -e \
-  'let v="";process.stdin.on("data",c=>v+=c).on("end",()=>{const a=JSON.parse(v);if(a.can_execute!==true)process.exit(1);process.stdout.write(a.id)})')"
-```
-
-An HTTP success is not permission. The guard above fails unless `can_execute` is exactly `true`.
-
-## 5. Execute, commit, and verify
-
-Execute through your own system before `execute_before`. Commit only after the executor accepts the action:
-
-```zsh
-curl --fail-with-body --silent --show-error \
-  --request PUT "$ATTESSO_API_URL/v1/authorizations/$AUTHORIZATION_ID/commit" \
-  --header "Authorization: Bearer $ATTESSO_API_KEY" \
-  --header "Content-Type: application/json" \
-  --header "Idempotency-Key: authorization.commit.$RUN_ID" \
-  --data "{\"external_action_reference\":\"booking_$RUN_ID\"}"
-```
-
-The Authorization becomes `COMMITTED` and the Mandate becomes `CONSUMED`. Finish by following [Verify evidence](/guides/verify-evidence).
-
-```zsh
-unset ATTESSO_API_KEY IDENTITY_ASSERTION
-```
+Use one idempotency key per logical write; reuse it only when retrying the
+same operation with the same input.
