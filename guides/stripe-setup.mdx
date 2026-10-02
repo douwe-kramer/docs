@@ -7,6 +7,14 @@ icon: "banknote"
 This page covers Attesso's own Stripe Billing connection. It does not configure
 or access any payment account the integrator may use to execute an approved action.
 
+Attesso is a spending-control layer: it authorizes actions against a user-signed
+mandate and produces signed evidence, and it never moves money. The billing
+connection on this page is Attesso's own, separate from the payment provider you
+use to execute authorized actions. Linking happens in Stripe-hosted Checkout:
+card payments are accepted and you do not need your own Stripe account to pay
+Attesso. To bind authorized actions to your own provider, see
+[bind an authorization to your PSP](./bind-to-your-psp).
+
 The free test environment uses `https://api-staging.attesso.com` and `att_test_`
 keys. The live environment uses `https://api.attesso.com` and `att_live_` keys.
 Both are server-only credentials and are not interchangeable.
@@ -24,6 +32,9 @@ Both are server-only credentials and are not interchangeable.
 The success redirect does not activate live access. Attesso verifies a signed
 Stripe webhook, retrieves current subscription state, and then persists the
 entitlement server-side.
+
+If you close Checkout without subscribing, the workspace stays unlinked; choose
+**Link Stripe Billing** again when you are ready.
 
 The V1 price is **0.5% + \$0.25 USD per authorized transaction**: 0.5% of the
 Mandate's authorized amount plus \$0.25, with a minimum of \$0.30 and a maximum
