@@ -108,6 +108,56 @@ const response = await adyen.checkout.payments({
 // response.pspReference is your provider_transaction_reference
 ```
 
+### Airwallex example
+
+```js
+// Airwallex PaymentIntent, using the same amount/currency Attesso authorized.
+// Sandbox host: api.sandbox.airwallex.com (live: api.airwallex.com).
+// Auth: exchange your Client ID and API key for a Bearer token first.
+const login = await fetch('https://api.airwallex.com/api/v1/authentication/login', {
+  method: 'POST',
+  headers: { 'x-client-id': clientId, 'x-api-key': apiKey },
+});
+const { token } = await login.json();
+
+const created = await (await fetch('https://api.airwallex.com/api/v1/pa/payment_intents/create', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    request_id: 'booking-2026-08-04-001',        // your external_action_reference (idempotency)
+    amount: 42000,                               // minor units, matches proposed_action.payment
+    currency: 'EUR',
+    merchant_order_id: 'booking-2026-08-04-001', // findable after a lost response
+    metadata: { external_action_reference: 'booking-2026-08-04-001' },
+  }),
+})).json();
+
+const confirmed = await (await fetch(
+  `https://api.airwallex.com/api/v1/pa/payment_intents/${created.id}/confirm`,
+  {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      request_id: 'booking-2026-08-04-001.confirm',
+      payment_method: {
+        type: 'card',
+        card: { number: '...', expiry_month: '...', expiry_year: '...', cvc: '...' },
+      },
+    }),
+  },
+)).json();
+// confirmed.id is your provider_transaction_reference
+```
+
+Report the Airwallex result to Attesso:
+
+- `status: 'SUCCEEDED'`: definite acceptance; commit with `provider_transaction_reference: confirmed.id`.
+- An error at confirm (`risk_declined`, `issuer_declined`, and similar): definite non-acceptance; cancel with `reason: EXECUTOR_REJECTED`.
+- `REQUIRES_CUSTOMER_ACTION` (3D Secure) or `REQUIRES_CAPTURE` (pre-authorisation): not final; do not commit or cancel yet.
+- A timeout or lost response: retry with the same `request_id`. The duplicate is refused (`duplicate_request`), which proves the original request was recorded; find the payment by `merchant_order_id` or retrieve it by its id.
+
+Confirm calls that may require 3D Secure also need a `return_url`. In the sandbox, cards such as `4035501000000008` always succeed.
+
 ## Step 3: Report finality
 
 After the PSP returns a definite result, report it to Attesso. This is what closes the loop and produces the evidence.
