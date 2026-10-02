@@ -69,15 +69,32 @@ Now bind the `ALLOW` to a real action on your rail. The request you send to your
 
 ```js
 // Stripe PaymentIntent, using the same amount/currency Attesso authorized.
-const paymentIntent = await stripe.paymentIntents.create({
-  amount: 42000,            // minor units, matches proposed_action.payment
-  currency: 'eur',
-  payment_method: pm_...,
-  confirm: true,
-  idempotencyKey: 'booking-2026-08-04-001', // your external_action_reference
-});
+const paymentIntent = await stripe.paymentIntents.create(
+  {
+    amount: 42000,            // minor units, matches proposed_action.payment
+    currency: 'eur',
+    payment_method: 'pm_...', // the payment method you are charging
+    confirm: true,
+    // Server-side execution, no browser to return to: no redirect-based methods.
+    automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+    metadata: {
+      external_action_reference: 'booking-2026-08-04-001',
+      attesso_authorization_id: 'aut_01J2...',
+    },
+  },
+  { idempotencyKey: 'booking-2026-08-04-001' }, // request option, = your external_action_reference
+);
 // paymentIntent.id is your provider_transaction_reference
 ```
+
+Report the Stripe result to Attesso:
+
+- `status: 'succeeded'`: definite acceptance; commit with `provider_transaction_reference: paymentIntent.id`.
+- A decline (`card_declined`): definite non-acceptance; cancel with `reason: EXECUTOR_REJECTED`.
+- `requires_action` (for example, your customer still has to complete 3D Secure): not final; do not commit or cancel yet.
+- A timeout or lost response: reconcile before deciding. The PaymentIntent is findable by its `metadata.external_action_reference`, or by replaying the identical request with the same idempotency key.
+
+The idempotency key is a request option (the second argument), not a body parameter. In Stripe test mode the same call works with an `sk_test_...` key and the test payment method `pm_card_visa`.
 
 ### Adyen example
 

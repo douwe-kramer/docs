@@ -31,7 +31,9 @@ An Attesso authorization is a **reservation**, not proof that execution happened
 
 When the outcome is ambiguous, do this before deciding:
 
-1. **Query the provider** by your `external_action_reference` (your idempotency key for the PSP call). Stripe: `GET /v1/payment_intents/{id}`. Adyen: `GET /v3/payments/{pspReference}`. Most providers let you look up by your own reference.
+1. **Query the provider** by your `external_action_reference` (your idempotency key for the PSP call). Most providers let you look up by your own reference:
+   - Stripe: retrieve the PaymentIntent by ID if you recorded it, replay the identical create request with the same idempotency key (the original result is returned for at least 24 hours), or search by the metadata you attached: `GET /v1/payment_intents/search?query=metadata['external_action_reference']:'booking-2026-08-04-001'`. Allow up to a minute for search to propagate before treating an empty result as no record.
+   - Adyen: `GET /v3/payments/{pspReference}`.
 2. **Match the result**:
    - Provider shows the action **succeeded** → **Commit**.
    - Provider shows the action **failed/declined** → **Cancel**.
