@@ -128,6 +128,7 @@ const created = await (await fetch('https://api.airwallex.com/api/v1/pa/payment_
     amount: 42000,                               // minor units, matches proposed_action.payment
     currency: 'EUR',
     merchant_order_id: 'booking-2026-08-04-001', // findable after a lost response
+    return_url: 'https://your-app.example/airwallex/return', // required when 3D Secure may trigger
     metadata: { external_action_reference: 'booking-2026-08-04-001' },
   }),
 })).json();
@@ -153,10 +154,10 @@ Report the Airwallex result to Attesso:
 
 - `status: 'SUCCEEDED'`: definite acceptance; commit with `provider_transaction_reference: confirmed.id`.
 - An error at confirm (`risk_declined`, `issuer_declined`, and similar): definite non-acceptance; cancel with `reason: EXECUTOR_REJECTED`.
-- `REQUIRES_CUSTOMER_ACTION` (3D Secure) or `REQUIRES_CAPTURE` (pre-authorisation): not final; do not commit or cancel yet.
+- `REQUIRES_CUSTOMER_ACTION` (3D Secure; the response carries the `next_action` redirect) or `REQUIRES_CAPTURE` (pre-authorisation): not final; do not commit or cancel yet.
 - A timeout or lost response: retry with the same `request_id`. The duplicate is refused (`duplicate_request`), which proves the original request was recorded; find the payment by `merchant_order_id` or retrieve it by its id.
 
-Confirm calls that may require 3D Secure also need a `return_url`. In the sandbox, cards such as `4035501000000008` always succeed.
+A `return_url` on the PaymentIntent is required when the card may trigger 3D Secure; without it the confirm fails (`Missing 'return_url' for 3DS verification`). In the sandbox, cards such as `4035501000000008` always succeed.
 
 ## Step 3: Report finality
 
