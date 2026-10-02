@@ -51,7 +51,7 @@
           "guides/use-your-own-card",
           "guides/reconcile-authorizations",
           "guides/generic-executor",
-          "guides/stripe-setup",
+          "guides/connect-payment-method",
           "guides/verify-evidence"
         ]
       },
@@ -146,6 +146,10 @@
     {
       "source": "/concepts/evidence",
       "destination": "/guides/verify-evidence"
+    },
+    {
+      "source": "/guides/stripe-setup",
+      "destination": "/guides/connect-payment-method"
     }
   ]
 }
