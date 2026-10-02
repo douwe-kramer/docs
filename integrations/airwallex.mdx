@@ -1,0 +1,73 @@
+---
+title: "Airwallex"
+description: "Execute an approved Attesso action on Airwallex and report finality."
+---
+
+Take an `ALLOW` from Attesso and execute it on Airwallex as a PaymentIntent, then report the outcome. This is the Airwallex recipe for the pattern in [Bind an authorization to your PSP](../guides/bind-to-your-psp).
+
+Sandbox host: `api.sandbox.airwallex.com` (live: `api.airwallex.com`).
+
+## Authenticate
+
+Exchange your Client ID and API key for a Bearer token:
+
+```js
+const login = await fetch('https://api.airwallex.com/api/v1/authentication/login', {
+  method: 'POST',
+  headers: { 'x-client-id': clientId, 'x-api-key': apiKey },
+});
+const { token } = await login.json();
+```
+
+## Execute the approved action
+
+```js
+const created = await (await fetch('https://api.airwallex.com/api/v1/pa/payment_intents/create', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    request_id: 'booking-2026-08-04-001',        // your external_action_reference (idempotency)
+    amount: 42000,                               // minor units, matches proposed_action.payment
+    currency: 'EUR',
+    merchant_order_id: 'booking-2026-08-04-001', // findable after a lost response
+    return_url: 'https://your-app.example/airwallex/return', // required when 3D Secure may trigger
+    metadata: { external_action_reference: 'booking-2026-08-04-001' },
+  }),
+})).json();
+
+const confirmed = await (await fetch(
+  `https://api.airwallex.com/api/v1/pa/payment_intents/${created.id}/confirm`,
+  {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      request_id: 'booking-2026-08-04-001.confirm',
+      payment_method: {
+        type: 'card',
+        card: { number: '...', expiry_month: '...', expiry_year: '...', cvc: '...' },
+      },
+    }),
+  },
+)).json();
+// confirmed.id is your provider_transaction_reference
+```
+
+A `return_url` on the PaymentIntent is required when the card may trigger 3D Secure; without it the confirm fails (`Missing 'return_url' for 3DS verification`).
+
+## Report the outcome to Attesso
+
+- `status: 'SUCCEEDED'`: definite acceptance; commit with `provider_transaction_reference: confirmed.id`.
+- An error at confirm (`risk_declined`, `issuer_declined`, and similar): definite non-acceptance; cancel with `reason: EXECUTOR_REJECTED`.
+- `REQUIRES_CUSTOMER_ACTION` (3D Secure; the response carries the `next_action` redirect) or `REQUIRES_CAPTURE` (pre-authorisation): not final; do not commit or cancel yet.
+- A timeout or lost response: reconcile before deciding (below).
+
+## Reconcile a lost response
+
+- Retry the identical request with the same `request_id`. Airwallex refuses the duplicate (`duplicate_request`), which proves the original request was recorded.
+- Find the payment by its `merchant_order_id`, or retrieve it by its id.
+
+The full decision table is in [Reconcile authorization outcomes](../guides/reconcile-authorizations).
+
+## Sandbox testing
+
+Cards such as `4035501000000008` always succeed in the sandbox.

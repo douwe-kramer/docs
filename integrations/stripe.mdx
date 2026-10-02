@@ -1,0 +1,49 @@
+---
+title: "Stripe"
+description: "Execute an approved Attesso action on Stripe and report finality."
+---
+
+Take an `ALLOW` from Attesso and execute it on Stripe as a PaymentIntent, then report the outcome. This is the Stripe recipe for the pattern in [Bind an authorization to your PSP](../guides/bind-to-your-psp): authorize first, execute second, report finality.
+
+## Execute the approved action
+
+```js
+// Stripe PaymentIntent, using the same amount/currency Attesso authorized.
+const paymentIntent = await stripe.paymentIntents.create(
+  {
+    amount: 42000,            // minor units, matches proposed_action.payment
+    currency: 'eur',
+    payment_method: 'pm_...', // the payment method you are charging
+    confirm: true,
+    // Server-side execution, no browser to return to: no redirect-based methods.
+    automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+    metadata: {
+      external_action_reference: 'booking-2026-08-04-001',
+      attesso_authorization_id: 'aut_01J2...',
+    },
+  },
+  { idempotencyKey: 'booking-2026-08-04-001' }, // request option, = your external_action_reference
+);
+// paymentIntent.id is your provider_transaction_reference
+```
+
+The idempotency key is a request option (the second argument), not a body parameter; Stripe rejects unknown body parameters.
+
+## Report the outcome to Attesso
+
+- `status: 'succeeded'`: definite acceptance; commit with `provider_transaction_reference: paymentIntent.id`.
+- A decline (`card_declined`): definite non-acceptance; cancel with `reason: EXECUTOR_REJECTED`.
+- `requires_action` (for example, the customer still has to complete 3D Secure): not final; do not commit or cancel yet.
+- A timeout or lost response: reconcile before deciding (below).
+
+## Reconcile a lost response
+
+- Replay the identical request with the same idempotency key; Stripe returns the original result for at least 24 hours.
+- Retrieve the PaymentIntent by ID if you recorded it.
+- Search by the metadata you attached: `metadata['external_action_reference']`. Allow up to a minute for search to propagate before treating an empty result as no record.
+
+The full decision table is in [Reconcile authorization outcomes](../guides/reconcile-authorizations).
+
+## Test mode
+
+The same call works with an `sk_test_...` key and the test payment method `pm_card_visa`.

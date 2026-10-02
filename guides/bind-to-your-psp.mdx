@@ -65,38 +65,14 @@ Idempotency-Key: aut_<your-unique-key>
 
 Now bind the `ALLOW` to a real action on your rail. The request you send to your PSP must be derived from the **same immutable proposed action** you sent to Attesso. Never rebuild it from mutable UI or agent state.
 
-### Stripe example
+### Worked integrations
 
-```js
-// Stripe PaymentIntent, using the same amount/currency Attesso authorized.
-const paymentIntent = await stripe.paymentIntents.create(
-  {
-    amount: 42000,            // minor units, matches proposed_action.payment
-    currency: 'eur',
-    payment_method: 'pm_...', // the payment method you are charging
-    confirm: true,
-    // Server-side execution, no browser to return to: no redirect-based methods.
-    automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
-    metadata: {
-      external_action_reference: 'booking-2026-08-04-001',
-      attesso_authorization_id: 'aut_01J2...',
-    },
-  },
-  { idempotencyKey: 'booking-2026-08-04-001' }, // request option, = your external_action_reference
-);
-// paymentIntent.id is your provider_transaction_reference
-```
+Tested, end-to-end recipes for specific providers:
 
-Report the Stripe result to Attesso:
+- [Stripe](../integrations/stripe): PaymentIntent with server-side confirm, decline and 3D Secure handling, test mode.
+- [Airwallex](../integrations/airwallex): sandbox flow, 3D Secure, reconciliation.
 
-- `status: 'succeeded'`: definite acceptance; commit with `provider_transaction_reference: paymentIntent.id`.
-- A decline (`card_declined`): definite non-acceptance; cancel with `reason: EXECUTOR_REJECTED`.
-- `requires_action` (for example, your customer still has to complete 3D Secure): not final; do not commit or cancel yet.
-- A timeout or lost response: reconcile before deciding. The PaymentIntent is findable by its `metadata.external_action_reference`, or by replaying the identical request with the same idempotency key.
-
-The idempotency key is a request option (the second argument), not a body parameter. In Stripe test mode the same call works with an `sk_test_...` key and the test payment method `pm_card_visa`.
-
-### Adyen example
+For any other provider the pattern is the same: authorize on Attesso, execute on their API with your `external_action_reference`, then report finality. Sketch, for Adyen:
 
 ```js
 const response = await adyen.checkout.payments({
@@ -107,57 +83,6 @@ const response = await adyen.checkout.payments({
 });
 // response.pspReference is your provider_transaction_reference
 ```
-
-### Airwallex example
-
-```js
-// Airwallex PaymentIntent, using the same amount/currency Attesso authorized.
-// Sandbox host: api.sandbox.airwallex.com (live: api.airwallex.com).
-// Auth: exchange your Client ID and API key for a Bearer token first.
-const login = await fetch('https://api.airwallex.com/api/v1/authentication/login', {
-  method: 'POST',
-  headers: { 'x-client-id': clientId, 'x-api-key': apiKey },
-});
-const { token } = await login.json();
-
-const created = await (await fetch('https://api.airwallex.com/api/v1/pa/payment_intents/create', {
-  method: 'POST',
-  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    request_id: 'booking-2026-08-04-001',        // your external_action_reference (idempotency)
-    amount: 42000,                               // minor units, matches proposed_action.payment
-    currency: 'EUR',
-    merchant_order_id: 'booking-2026-08-04-001', // findable after a lost response
-    return_url: 'https://your-app.example/airwallex/return', // required when 3D Secure may trigger
-    metadata: { external_action_reference: 'booking-2026-08-04-001' },
-  }),
-})).json();
-
-const confirmed = await (await fetch(
-  `https://api.airwallex.com/api/v1/pa/payment_intents/${created.id}/confirm`,
-  {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      request_id: 'booking-2026-08-04-001.confirm',
-      payment_method: {
-        type: 'card',
-        card: { number: '...', expiry_month: '...', expiry_year: '...', cvc: '...' },
-      },
-    }),
-  },
-)).json();
-// confirmed.id is your provider_transaction_reference
-```
-
-Report the Airwallex result to Attesso:
-
-- `status: 'SUCCEEDED'`: definite acceptance; commit with `provider_transaction_reference: confirmed.id`.
-- An error at confirm (`risk_declined`, `issuer_declined`, and similar): definite non-acceptance; cancel with `reason: EXECUTOR_REJECTED`.
-- `REQUIRES_CUSTOMER_ACTION` (3D Secure; the response carries the `next_action` redirect) or `REQUIRES_CAPTURE` (pre-authorisation): not final; do not commit or cancel yet.
-- A timeout or lost response: retry with the same `request_id`. The duplicate is refused (`duplicate_request`), which proves the original request was recorded; find the payment by `merchant_order_id` or retrieve it by its id.
-
-A `return_url` on the PaymentIntent is required when the card may trigger 3D Secure; without it the confirm fails (`Missing 'return_url' for 3DS verification`). In the sandbox, cards such as `4035501000000008` always succeed.
 
 ## Step 3: Report finality
 
