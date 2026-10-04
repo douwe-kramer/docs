@@ -1,0 +1,179 @@
+---
+title: "Check the record"
+description: "Prove nothing in the record was rewritten or removed, without trusting Attesso."
+icon: "history"
+---
+
+Attesso keeps a provable record: every mandate event is appended to one
+tamper-evident log, and each signed checkpoint commits to everything before
+it. Checking the record answers one question without trusting Attesso: **has
+anything in the record been rewritten or removed since the snapshot you
+hold?**
+
+Everything on this page verifies with a hash function and Attesso's published
+log keys. No Attesso service is needed at verification time; you need Attesso
+only to fetch fresh checkpoints and proofs.
+
+The record log is an
+[RFC 6962](https://datatracker.ietf.org/doc/html/rfc6962) Merkle tree. Leaves
+are per-event digests, so verification never needs event contents, and any
+RFC 6962 library or a page of code can check the proofs.
+
+## The artifacts
+
+| Artifact | Where it comes from |
+|---|---|
+| Log keys | `GET /.well-known/record-log-jwks.json` (no key needed) |
+| A checkpoint | `GET /v1/record/checkpoints/latest`, the `checkpoint` object |
+| Time anchors | the `anchors` array on any checkpoint response (may be empty) |
+| A consistency proof | `GET /v1/record/consistency?from=<your checkpoint's tree_size>` |
+| A mandate record proof | `GET /v1/mandates/{mandate_id}/record-proof` |
+
+```sh
+curl -s https://api.attesso.com/.well-known/record-log-jwks.json -o jwks.json
+
+# Save this as your snapshot. -checkpoint and -previous read this body, or
+# the bare "checkpoint" object.
+curl -s -H "Authorization: Bearer $ATTESSO_API_KEY" \
+  https://api.attesso.com/v1/record/checkpoints/latest -o saved.json
+
+# Later: fetch the current checkpoint...
+curl -s -H "Authorization: Bearer $ATTESSO_API_KEY" \
+  https://api.attesso.com/v1/record/checkpoints/latest -o latest.json
+
+# ...and prove it still contains everything you saved.
+curl -s -H "Authorization: Bearer $ATTESSO_API_KEY" \
+  "https://api.attesso.com/v1/record/consistency?from=<saved tree_size>" \
+  -o consistency.json
+
+# Prove your mandate's events are in the record.
+curl -s -H "Authorization: Bearer $ATTESSO_API_KEY" \
+  https://api.attesso.com/v1/mandates/$MANDATE_ID/record-proof \
+  -o record-proof.json
+```
+
+## What each check proves
+
+- **Checkpoint signature**: the checkpoint was signed by Attesso's log key
+  and the signed bytes are exactly what you received. A checkpoint nobody can
+  forge is what makes every later comparison meaningful.
+- **Consistency**: the tree you saved is contained in the newer tree, leaf for
+  leaf and in order. If a single history leaf had been changed or removed, no
+  consistency proof could exist. This is the check that catches rewrites and
+  omissions.
+- **Inclusion**: each of your mandate's events is a leaf of the checkpointed
+  tree at the position the proof names. The events themselves come from the
+  evidence bundle you hold; the record proof shows they were committed.
+- **Time anchor** (when present): the checkpoint's hash was timestamped by an
+  independent RFC 3161 authority at `gen_time`, so the checkpoint existed by
+  that moment regardless of Attesso's key.
+
+## The signed checkpoint
+
+`payload` decodes to this canonical JSON; the signature covers these exact
+bytes:
+
+```json
+{
+  "schema": "attesso.record.checkpoint.v1",
+  "tree_size": 2,
+  "root_hash": "8e0a...<64 hex>",
+  "created_at": "2026-10-02T20:15:00Z",
+  "prev_hash": "2705...<64 hex>"
+}
+```
+
+- `tree_size` counts every event in the log up to this checkpoint.
+- `root_hash` is the RFC 6962 root over the leaves.
+- `prev_hash` chains each checkpoint to its predecessor, so a set of
+  checkpoints you collected over time also forms a chain.
+
+Merkle hashing, if you verify by hand or in another language: the leaf hash of
+an event digest is `SHA-256(0x00 || digest)`, interior nodes are
+`SHA-256(0x01 || left || right)`, and a record proof's `event_digest` field
+is `sha256:<digest hex>`.
+
+## The time anchor
+
+`anchors` carries the RFC 3161 time anchors collected for a checkpoint, one
+object per token. A token is signed by a Time-Stamp Authority over the
+checkpoint's hash. It is the independent half of the record: Attesso's key
+alone could sign a backdated checkpoint, but a token from an authority that
+never spoke to Attesso fixes the checkpoint's existence at a moment it
+attests.
+
+```json
+{
+  "tsa": "https://freetsa.org/tsr",
+  "token": "MIIF...<standard base64 of the DER token>",
+  "gen_time": "2026-10-02T20:15:03Z",
+  "serial": "1974252251089555633",
+  "policy": "1.2.3.4.5"
+}
+```
+
+To check one with ordinary tooling: decode `token` from standard base64 to a
+`.tsr` file, then inspect it with OpenSSL.
+
+```sh
+echo "$TOKEN" | base64 -d > checkpoint.tsr
+openssl ts -reply -token_in -in checkpoint.tsr -text
+```
+
+The token's message imprint must equal the checkpoint's hash, computed from
+the `payload` you hold (SHA-256 over the decoded payload bytes). Whether you
+*trust* that authority is your policy, not Attesso's: check the token against
+the TSA's published certificate, or treat it as a second signature over the
+same bytes. An unanchored checkpoint serves `"anchors": []`, and that is
+honest: the worker anchors on its next cycle when an authority is reachable.
+
+## Verify it (Go, standard library only)
+
+`check-the-record.go` is the runnable recipe: it takes the artifacts above and
+prints one `OK` or `FAIL` line per check. Download it, then:
+
+```sh
+curl -O https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/check-the-record.go
+go run check-the-record.go -jwks jwks.json -checkpoint latest.json \
+  -previous saved.json -consistency consistency.json \
+  -record-proof record-proof.json
+```
+
+```
+OK checkpoint: kid=... tree_size=2 created_at=2026-10-02T20:15:00Z root=8e0a...
+OK previous: kid=... tree_size=1 root=2705...
+OK consistency: tree size 1 is contained in size 2
+OK record checkpoint: kid=... tree_size=2 root=8e0a...
+OK inclusion: sequence=1 leaf=0 tree_size=2
+OK inclusion: sequence=2 leaf=1 tree_size=2
+OK record: 2 entries verified, 0 pending events
+All checks passed.
+```
+
+Exit code 0 means everything verified; exit code 1 names the checks that did
+not. The same steps are implementable in any language that has SHA-256 and
+ECDSA P-256; the example is a reference, not a dependency.
+
+## When the record proof lags
+
+`record-proof` reports `pending_events`: the mandate's events not yet covered
+by a published checkpoint (journal lag plus checkpoint lag). A non-zero count
+is normal right after activity; fetch again once the next checkpoint exists.
+`checkpoint` is `null` until the log's first checkpoint, and inclusion proofs
+only exist for events the checkpoint covers.
+
+## Limits
+
+- The record proves the log only grows and that what you saw earlier is still
+  contained. It is a point-in-time guarantee: re-check the latest checkpoint
+  to extend it.
+- Checkpoints are signed by one published key; the keys page
+  (`/.well-known/record-log-jwks.json`) retains rotated keys for the
+  evidence-retention period. A compromised key can forge checkpoints until
+  rotation; your previously saved checkpoints and the `prev_hash` chain still
+  pin the earlier history.
+- Attesso fetches fresh proofs for you today. The proofs are offline
+  verifiable, which is what makes them worth collecting.
+
+See also: [Verify evidence](/guides/verify-evidence) for the evidence bundle
+that carries a mandate's events.
