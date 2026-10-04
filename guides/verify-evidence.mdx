@@ -265,19 +265,10 @@ if __name__ == "__main__":
 ## What the signature covers
 
 - The immutable Mandate and policy digest
-- For a subscription, the authorized terms digest and the terms it covers
 - The verified approval proof
-- Every proposed action and Attesso decision, including the period each approved charge was attributed to
+- Every proposed action and Attesso decision
 - Reservation, commit, cancellation, revocation, and expiry events
 - Source-labelled lifecycle assertions supplied by your platform
-
-### Reconstructing per-period spend
-
-A subscription's mandate carries `execution_mode`, the period terms (`period_unit`, `period_days`, `period_count`, `period_max_amount`, `period_currency`, `period_anchor`), and `authorized_terms_digest`. Every `authorization.created` event for an approved charge carries `period_index`.
-
-Together those are enough to rebuild what was spent in each period without reimplementing the cadence arithmetic: take the terms from `mandate`, and sum the payment amount on each allowed event by its `period_index`. Compare the result against `period_max_amount` to check that no period was overspent, and against `period_count` to check that no charge fell outside the authorized term.
-
-`authorized_terms_digest` is the value the approval was bound to. Recompute it over the terms above and the mandate's `valid_from` and `valid_until`, in the order the mandate lists them, newline-separated after the domain line `attesso.authorized-terms.v1`, and compare. A mismatch means the authority changed after it was approved, so treat it as a verification failure.
 
 <Note>
   Evidence is not a payment receipt or proof that an external provider performed an action. It distinguishes Attesso-verified events from facts your platform reported.
