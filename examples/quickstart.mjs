@@ -24,7 +24,7 @@
 //   node quickstart.mjs --help
 
 import { spawn } from 'node:child_process';
-import { createPrivateKey, createPublicKey, generateKeyPairSync, randomUUID, sign, verify } from 'node:crypto';
+import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, randomUUID, sign, verify } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
@@ -444,8 +444,35 @@ async function waitForMandateActive(state, mandateID) {
   }
 }
 
-function createAuthorization(state, mandateID, runID, label, amount) {
-  return apiRequest(state, {
+// The single-use pair: a random opening the integrator keeps, and the
+// commitment that hides it (SHA-256 of the domain line plus the opening's raw
+// bytes). One derivation here, the same bytes every verifier recomputes.
+const COMMITMENT_DOMAIN = 'attesso:authorization:commitment:v1\n';
+
+function deriveCommitment(opening) {
+  return (
+    'sha256:' +
+    createHash('sha256')
+      .update(
+        Buffer.concat([
+          Buffer.from(COMMITMENT_DOMAIN),
+          Buffer.from(opening, 'hex'),
+        ])
+      )
+      .digest('hex')
+  );
+}
+
+function newCommitmentPair() {
+  const opening = randomBytes(32).toString('hex');
+  return { opening, commitment: deriveCommitment(opening) };
+}
+
+// Each attempt records its own single-use commitment; the caller that may
+// commit keeps the returned opening, the rest are discarded unread.
+async function createAuthorization(state, mandateID, runID, label, amount) {
+  const pair = newCommitmentPair();
+  const result = await apiRequest(state, {
     method: 'POST',
     path: `/v1/mandates/${mandateID}/authorizations`,
     idempotencyKey: `quickstart.authorization.${label}.${runID}`,
@@ -457,8 +484,10 @@ function createAuthorization(state, mandateID, runID, label, amount) {
         payment: { amount, currency: 'EUR' },
       },
       execution_window_seconds: EXECUTION_WINDOW_SECONDS,
+      commitment: pair.commitment,
     },
   });
+  return { result, opening: pair.opening };
 }
 
 // Fetches the signed bundle only; the signature check below runs locally
@@ -645,7 +674,8 @@ async function run(options) {
       }
       process.stdout.write('Mandate is ACTIVE. (The redirect is not proof; this server-side read is.)\n');
 
-      const denied = await createAuthorization(state, mandate.payload.id, runID, 'deny', DEMO_DENY_AMOUNT);
+      // The over-cap probe cannot commit; its opening is discarded unread.
+      const { result: denied } = await createAuthorization(state, mandate.payload.id, runID, 'deny', DEMO_DENY_AMOUNT);
       if (denied.status !== 201) {
         throw new Error(`the over-cap probe failed: ${describeFailure(denied)}`);
       }
@@ -658,7 +688,7 @@ async function run(options) {
         `Over the cap (${euroAmount(DEMO_DENY_AMOUNT)}): ${denied.payload.decision}. Nothing was reserved.\n`,
       );
 
-      const allowed = await createAuthorization(state, mandate.payload.id, runID, 'allow', DEMO_ALLOW_AMOUNT);
+      const { result: allowed, opening: allowedOpening } = await createAuthorization(state, mandate.payload.id, runID, 'allow', DEMO_ALLOW_AMOUNT);
       if (allowed.status !== 201) {
         throw new Error(`authorization failed: ${describeFailure(allowed)}`);
       }
@@ -676,7 +706,7 @@ async function run(options) {
         method: 'PUT',
         path: `/v1/authorizations/${allowed.payload.id}/commit`,
         idempotencyKey: `quickstart.authorization.commit.${runID}`,
-        body: { external_action_reference: `emu_${runID}` },
+        body: { external_action_reference: `emu_${runID}`, opening: allowedOpening },
       });
       if (committed.status !== 200) {
         throw new Error(`commit failed: ${describeFailure(committed)}`);

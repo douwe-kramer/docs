@@ -97,9 +97,15 @@ Idempotency-Key: aut_<your-unique-key>
     "attributes": { "route": "AMS-NYC", "cabin": "economy" },
     "payment": { "amount": 24000, "currency": "EUR" }
   },
-  "execution_window_seconds": 300
+  "execution_window_seconds": 300,
+  "commitment": "sha256:<64 hex characters>"
 }
 ```
+
+The `commitment` is the SHA-256 of the domain line
+`attesso:authorization:commitment:v1` plus a random 32-byte opening you keep.
+Send it at creation, reveal the opening on commit (Step 5), and never reuse
+the pair.
 
 **Response (ALLOW):**
 
@@ -148,20 +154,21 @@ After the card provider returns a definite result, close the loop.
 ### Commit (the charge was accepted)
 
 ```http
-POST /v1/authorizations/{authorization_id}/commit
+PUT /v1/authorizations/{authorization_id}/commit
 Idempotency-Key: commit_<your-unique-key>
 
 {
   "external_action_reference": "booking-2026-08-05-001",
   "provider_transaction_reference": "ch_3N...",
-  "reported_accepted_at": "2026-08-05T12:04:30Z"
+  "reported_accepted_at": "2026-08-05T12:04:30Z",
+  "opening": "<64 hex characters>"
 }
 ```
 
 ### Cancel (the charge was declined, or you aborted)
 
 ```http
-POST /v1/authorizations/{authorization_id}/cancellation
+PUT /v1/authorizations/{authorization_id}/cancellation
 Idempotency-Key: cancel_<your-unique-key>
 
 {

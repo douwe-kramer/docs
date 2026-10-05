@@ -36,10 +36,13 @@ approval-trust values in the dashboard once; every later run is zero-config.
    assertion and create the hosted approval session; send the browser to the
    returned `approval_url`, then read the Mandate server-to-server until it is
    `ACTIVE`. Claims and signing examples: [Hosted approval](/guides/hosted-approval).
-3. `POST /v1/mandates/{id}/authorizations`: authorize the concrete action;
-   continue only when `can_execute` is exactly `true`.
+3. `POST /v1/mandates/{id}/authorizations`: authorize the concrete action with
+   a single-use `commitment` (the SHA-256 of the domain line
+   `attesso:authorization:commitment:v1` plus a random 32-byte opening you
+   keep); continue only when `can_execute` is exactly `true`.
 4. `PUT /v1/authorizations/{id}/commit`: after your executor accepts the
-   action; the Authorization becomes `COMMITTED` and the Mandate `CONSUMED`.
+   action, revealing the `opening`; the Authorization becomes `COMMITTED` and
+   the Mandate `CONSUMED`.
 5. `GET /v1/mandates/{id}/evidence`: fetch the signed bundle and verify it
    ([Verify evidence](/guides/verify-evidence)).
 

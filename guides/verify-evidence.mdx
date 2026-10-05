@@ -270,6 +270,20 @@ if __name__ == "__main__":
 - Reservation, commit, cancellation, revocation, and expiry events
 - Source-labelled lifecycle assertions supplied by your platform
 
+### Verifying single-use commitments
+
+An authorization created under the single-use requirement records a `commitment` on its `authorization.created` event: the SHA-256 of a domain line plus a random opening you keep, so Attesso never sees the opening until the commit reveals it. The commit carries the opening on its `authorization.committed` event. Check:
+
+- Recompute `SHA-256("attesso:authorization:commitment:v1\n" || opening)` over the opening's raw bytes (not its hex text) and compare against the commitment's hex digest. A mismatch means the commit does not belong to the creation it claims.
+- A committed event without a well-formed opening, or more than one committed event for one authorization, is a failure.
+- Commits recorded before the requirement carry no commitment on their creation and are labelled historical, not failures.
+
+The runnable script `examples/verify-evidence.js` performs these checks after the signature verifies and reports them in its summary:
+
+```text
+  sealed pairs checked: 1, historical commits skipped: 0, failures: 0
+```
+
 <Note>
   Evidence is not a payment receipt or proof that an external provider performed an action. It distinguishes Attesso-verified events from facts your platform reported.
 </Note>
