@@ -64,3 +64,12 @@ When you cancel, you assert how the external capability now stands:
 - `NO_LONGER_POSSIBLE`: the action could have executed but no longer can (e.g. the provider rejected it, or the credential is spent).
 
 Choose the disposition that matches the truth. It is part of the signed evidence.
+
+## Refund reports
+
+A refund is not an authorization transition. Once you committed a charge and the provider refunded it, report the refund so the signed evidence carries the claim: `POST /v1/authorizations/{authorization_id}/reports` with `kind` `refund`, a positive `amount` in minor units, the authorization's `currency`, and an `external_reference` for the refund.
+
+- The target must be `COMMITTED`.
+- The reference is the replay key: the same reference and body returns the same report with `Idempotency-Replayed: true`; the same reference with a different body is a conflict.
+- Cumulative refunds cannot exceed the committed amount; a refusal names the remaining refundable amount.
+- A refund never changes the authorization or mandate state. Its evidence event carries `"source": "integrator_reported"`, so the record separates facts you reported from facts Attesso verified; `verify-evidence.js` counts those events separately.

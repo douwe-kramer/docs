@@ -106,6 +106,25 @@ function checkSingleUse(events) {
   return { sealed, historical, failures };
 }
 
+// The provenance check: report events carry the machine-readable
+// integrator_reported label. An unlabelled report event is a failure.
+function checkReports(events) {
+  let reports = 0;
+  let failures = 0;
+  for (const event of events) {
+    if (event.type !== 'authorization.reported' || !event.payload) continue;
+    reports += 1;
+    if (event.payload.source !== 'integrator_reported') {
+      failures += 1;
+      console.error(
+        'FAILED: report event carries no integrator_reported source label for ' +
+          (event.payload.report_id || event.payload.authorization_id)
+      );
+    }
+  }
+  return { reports, failures };
+}
+
 async function main() {
   const [evidencePath, jwksPath] = process.argv.slice(2);
   if (!evidencePath) {
@@ -165,7 +184,8 @@ async function main() {
   const payload = JSON.parse(b64urlToBuffer(envelope.payload).toString('utf8'));
   const events = Array.isArray(payload.events) ? payload.events : [];
   const singleUse = checkSingleUse(events);
-  if (singleUse.failures === 0) {
+  const reportCheck = checkReports(events);
+  if (singleUse.failures === 0 && reportCheck.failures === 0) {
     console.log('OK: evidence verified');
   }
   console.log('  mandate:      ' + payload.mandate.id);
@@ -177,7 +197,8 @@ async function main() {
     ', historical commits skipped: ' + singleUse.historical +
     ', failures: ' + singleUse.failures
   );
-  if (singleUse.failures > 0) {
+  console.log('  report events (integrator_reported): ' + reportCheck.reports);
+  if (singleUse.failures > 0 || reportCheck.failures > 0) {
     process.exit(1);
   }
 }

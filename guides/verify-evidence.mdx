@@ -282,7 +282,17 @@ The runnable script `examples/verify-evidence.js` performs these checks after th
 
 ```text
   sealed pairs checked: 1, historical commits skipped: 0, failures: 0
+  report events (integrator_reported): 1
 ```
+
+### Verifying refund reports
+
+An `authorization.reported` event is a refund or other external-report claim your platform submitted; Attesso records it and it never changes state. The single-use checks above do not cover it, so check its provenance:
+
+- Every `authorization.reported` payload carries `"source": "integrator_reported"`. Any other source is a failure: the event is not a claim your platform made.
+- The cumulative report amounts for one authorization never exceed the committed amount on its `payment`.
+
+The runnable script `examples/verify-evidence.js` counts report events separately and fails any unlabelled one.
 
 <Note>
   Evidence is not a payment receipt or proof that an external provider performed an action. It distinguishes Attesso-verified events from facts your platform reported.
