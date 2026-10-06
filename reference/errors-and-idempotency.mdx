@@ -41,7 +41,7 @@ Branch on `code`, `retryable`, and field pointers. Do not branch on human-readab
 
 ## Idempotency keys
 
-Every write requires `Idempotency-Key`. Keys contain 16–255 letters, digits, periods, underscores, colons, or hyphens.
+Every write except external reports requires `Idempotency-Key`; a report replays by its `external_reference`. Keys contain 16–255 letters, digits, periods, underscores, colons, or hyphens.
 
 - Persist one key before sending each logical operation.
 - Retry that operation with the same key and identical logical input.
