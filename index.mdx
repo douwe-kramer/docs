@@ -5,11 +5,9 @@ sidebarTitle: "Overview"
 icon: "house"
 ---
 
-Attesso is a server-to-server **spending-control and evidence layer** for asynchronous agent actions. Your backend creates a bounded mandate, the end user approves it with a passkey, and Attesso evaluates the concrete action your system proposes. You keep your own payment provider and bind each authorization to it.
+Attesso is a server-to-server **spending-control and evidence layer** for asynchronous agent actions. Your backend creates a bounded mandate. The end user approves it with a passkey. Attesso evaluates the concrete action your system proposes and signs the result into independently verifiable evidence.
 
-<Warning>
-  Attesso does not execute an action or move money. Continue only while the latest Authorization has `can_execute: true`.
-</Warning>
+Attesso does not execute an action or move money. You keep your own payment provider and bind each authorization to it.
 
 ## The complete flow
 
@@ -24,7 +22,7 @@ Attesso is a server-to-server **spending-control and evidence layer** for asynch
     Submit the exact action your system intends to perform. `DENY` and `INDETERMINATE` always fail closed.
   </Step>
   <Step title="Execute and close">
-    Execute through your own systems before `execute_before`, then commit after acceptance or cancel only after execution is impossible.
+    Execute through your own systems before `execute_before`. Commit after acceptance, or cancel only after execution is impossible.
   </Step>
   <Step title="Verify the record">
     Retrieve and verify the signed evidence envelope independently of the Attesso dashboard.
@@ -42,18 +40,18 @@ Attesso is a server-to-server **spending-control and evidence layer** for asynch
 
 <CardGroup cols={2}>
   <Card title="Run the quickstart" icon="rocket" href="/quickstart">
-    Follow the shortest complete integration path.
+    One command from a test key to verified evidence.
   </Card>
 
   <Card title="Understand the model" icon="shapes" href="/concepts/core-model">
-    Learn the states and single-use guarantees.
+    Mandate states and the single-use guarantee.
   </Card>
 
   <Card title="Define a policy" icon="list-checks" href="/concepts/policies">
-    Use the exact v1 constraint language.
+    The exact v1 constraint language.
   </Card>
 
   <Card title="Read the API reference" icon="braces" href="/reference/overview">
-    Review endpoints, media types, and environments.
+    Endpoints, media types, and environments.
   </Card>
 </CardGroup>
