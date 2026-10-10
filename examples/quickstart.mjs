@@ -60,13 +60,14 @@ Usage:
       Run one test Mandate end to end against the free test plane: create it,
       approve it in the browser with a passkey, see one over-cap DENY and one
       in-cap ALLOW, commit the emulated execution, and verify the signed
-      evidence locally. First run creates ./attesso-quickstart.json and walks
-      the one-time dashboard step.
+      evidence locally. First run creates ./attesso-quickstart.json and
+      provisions this workspace's test approval trust; live workspaces still
+      register trust in the dashboard.
 
   node quickstart.mjs --selftest [--subject <subject_reference>]
       Offline check: generate a one-off P-256 identity key, sign an identity
       assertion, and print { issuer, kid, subject, audience, assertion,
-      public_jwk } as JSON to stdout. No network; used by CI.
+      public_jwk, provision_body } as JSON to stdout. No network; used by CI.
 
   node quickstart.mjs --help
 `;
@@ -551,14 +552,53 @@ async function verifyEvidence(state, mandateID) {
 
 // -- run ---------------------------------------------------------------------
 
-function printSetupBlock(state) {
-  process.stdout.write('\n');
-  process.stdout.write('One-time setup: this workspace has no approval trust yet.\n');
-  process.stdout.write('Dashboard -> Test -> Approval trust; save exactly these values:\n\n');
+// The exact provisioning body the endpoint accepts for this identity; the
+// selftest prints the same shape.
+function approvalTrustBody(identity, origin) {
+  return {
+    identity_issuer: identity.iss,
+    approval_return_origin: origin,
+    identity_public_jwks: [publicIdentityJwk(identity)],
+  };
+}
+
+// A workspace with no approval trust yet: register this run's values from the
+// test key. The API validates the payload exactly as the dashboard does and
+// never replaces trust that is already registered (that refusal is the 409
+// below, which falls back to the manual dashboard step).
+async function provisionTestTrust(state) {
+  const result = await apiRequest(state, {
+    method: 'PUT',
+    path: '/v1/approval-trust',
+    body: approvalTrustBody(state.identity, returnOrigin(state)),
+  });
+  if (result.status === 200) {
+    process.stdout.write(
+      `\nTest approval trust provisioned for this workspace ` +
+        `(${state.identity.iss}, ${returnOrigin(state)}, ${state.identity.kid}).\n` +
+        'Live workspaces still register trust in the dashboard.\n',
+    );
+    return true;
+  }
+  if (result.status === 409 && result.payload?.code === 'APPROVAL_TRUST_ALREADY_REGISTERED') {
+    process.stdout.write('\nThis workspace already has different approval trust registered.\n');
+    return false;
+  }
+  throw new Error(`provisioning test approval trust failed: ${describeFailure(result)}`);
+}
+
+function printTrustValues(state) {
   process.stdout.write(`  Identity issuer   ${state.identity.iss}\n`);
   process.stdout.write(`  Return origin     ${returnOrigin(state)}\n`);
   process.stdout.write(`  Public JWKs       ${JSON.stringify([publicIdentityJwk(state.identity)])}\n`);
-  process.stdout.write('\nPaste them exactly as printed, save, then press Enter here.');
+}
+
+function printSetupBlock(state) {
+  process.stdout.write('\n');
+  process.stdout.write('Approval trust is not set up for this identity. Open\n');
+  process.stdout.write('Dashboard -> Test -> Approval trust and save exactly these values:\n\n');
+  printTrustValues(state);
+  process.stdout.write('\nSave them exactly as printed, then press Enter here.');
 }
 
 async function run(options) {
@@ -737,6 +777,9 @@ async function run(options) {
       return;
     }
     if (session.payload?.code === 'APPROVAL_NOT_CONFIGURED') {
+      if (attempt === 1 && (await provisionTestTrust(state))) {
+        continue;
+      }
       if (attempt > 1) {
         process.stdout.write('\n\nStill no approval trust for this workspace.');
       }
@@ -751,11 +794,14 @@ async function run(options) {
       throw new Error(apiKeyRejected());
     }
     if (session.payload?.code === 'VALIDATION_FAILED') {
+      process.stdout.write(
+        "\nThis workspace's approval trust holds different values. It must be updated to:\n\n",
+      );
+      printTrustValues(state);
       throw new Error(
         'the approval session was rejected (VALIDATION_FAILED). Approval trust for this ' +
           'workspace likely holds different values: open Dashboard -> Test -> Approval trust ' +
-          `and save the printed issuer, origin, and key exactly, or delete ${STATE_FILE} for a ` +
-          'fresh identity',
+          'and save the printed issuer, origin, and key exactly, replacing the values there',
       );
     }
     throw new Error(`the approval session was rejected: ${describeFailure(session)}`);
@@ -779,6 +825,7 @@ function runSelftest(subject) {
         audience: TEST_AUDIENCE,
         assertion,
         public_jwk: publicJwk,
+        provision_body: approvalTrustBody(privateJwk, `http://127.0.0.1:${DEFAULT_PORT}`),
       },
       null,
       2,
