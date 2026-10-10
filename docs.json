@@ -105,7 +105,7 @@
       "cursor"
     ]
   },
-  "description": "PSP-agnostic spending control and signed evidence for agent-led actions.",
+  "description": "Authorization and signed evidence for agentic commerce.",
   "fonts": {
     "family": "Geist"
   },
