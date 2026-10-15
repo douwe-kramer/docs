@@ -61,7 +61,8 @@
         "icon": "credit-card",
         "pages": [
           "integrations/stripe",
-          "integrations/airwallex"
+          "integrations/airwallex",
+          "integrations/mollie"
         ]
       },
       {
