@@ -8,6 +8,8 @@ Take an `ALLOW` from Attesso and execute it on Mollie as a payment, then report 
 
 API host: `https://api.mollie.com/v2`. Test mode uses a `test_` API key (or the `testmode` parameter with an organization access token); test and live data are fully isolated. Mollie's test mode supports EUR only.
 
+New to Attesso? The [quickstart](../quickstart) covers creating a workspace, a test key, and the approval trust this recipe assumes.
+
 ## Execute the approved action
 
 Create the payment from the same immutable proposed action you sent to `/authorizations`; bind the two systems with your `external_action_reference`.
@@ -25,7 +27,7 @@ const payment = await (await fetch('https://api.mollie.com/v2/payments', {
     description: 'Attesso booking 2026-08-04-001',
     redirectUrl: 'https://your-app.example/mollie/return',
     webhookUrl: 'https://your-app.example/mollie/webhook',   // must be publicly reachable; Mollie validates at creation
-    metadata: { attesso_authorization_id: 'aut_...', external_action_reference: 'booking-2026-08-04-001' },
+    metadata: { attesso_mandate_id: 'mnd_...', attesso_authorization_id: 'aut_...', external_action_reference: 'booking-2026-08-04-001' },
   }),
 })).json();
 
@@ -70,4 +72,6 @@ curl -O https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/mollie
 MOLLIE_API_KEY=test_... node mollie-e2e.mjs
 ```
 
-It creates a Mandate and approves it with a passkey, shows an over-cap attempt refused, commits one in-cap action through a Mollie test payment, then runs a second loop where the payment is failed and the authorization is cancelled, verifying the signed evidence locally each time. Settle each printed checkout URL in a browser: the test-mode status screen decides the payment's final state. The script plays the integrator for the proof; Attesso itself never calls executor APIs. Pass `MOLLIE_WEBHOOK_URL` (a public tunnel URL ending in `/mollie-webhook`) to exercise real webhook delivery, or leave it unset to settle by polling.
+It creates a Mandate and approves it with a passkey, shows an over-cap attempt refused, commits one in-cap action through a Mollie test payment, then runs a second loop where the payment is failed and the authorization is cancelled, verifying the signed evidence locally each time. Every Mandate and Authorization create is replayed under the same idempotency key first, and the replay must return the same resource. Settle each printed checkout URL in a browser: the test-mode status screen decides the payment's final state. The script plays the integrator for the proof; Attesso itself never calls executor APIs. Pass `MOLLIE_WEBHOOK_URL` (a public tunnel URL ending in `/mollie-webhook`) to exercise real webhook delivery, or leave it unset to settle by polling.
+
+To run it fully unattended, [mollie-e2e-drive.mjs](https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/mollie-e2e-drive.mjs) wraps the harness and plays both browser walks with Playwright: a virtual passkey for the approval and the test checkout for the payment. It needs Playwright (`npm install playwright`), and `node mollie-e2e-drive.mjs --runs 3` completes three full two-phase loops without a human at the keyboard.

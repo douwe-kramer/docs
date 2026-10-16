@@ -80,6 +80,8 @@ What it runs (test plane only; activity is free):
   Phase 2: same loop; the payment is pinned to card with the documented
   magic amount (EUR 1007.00) and driven to failed on the status screen ->
   cancel -> evidence verified.
+  Every Mandate and Authorization create is replayed under the same
+  idempotency key first; the replay must return the same resource.
 
 Environment:
   MOLLIE_API_KEY       required; Mollie test-mode API key (test_...).
@@ -475,30 +477,34 @@ async function provisionTestTrust(state) {
 // through the server-side read (the redirect is never the proof).
 // The `open` PATH shim in the rig records the approval URL.
 async function createAndApproveMandate(state, { runID, subject, externalReference, maxAmount, openEnv }) {
-  const mandate = await apiRequest(state, {
-    method: 'POST',
-    path: '/v1/mandates',
-    idempotencyKey: `mollie.${runID}.mandate.create`,
-    body: {
-      subject_reference: subject,
-      external_reference: externalReference,
-      policy: {
-        version: '1',
-        action: MANDATE_ACTION,
-        constraints: [
-          { path: 'payment.currency', operator: 'eq', value: 'EUR' },
-          { path: 'payment.amount', operator: 'max', value: maxAmount },
-        ],
-      },
-      approval_deadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      valid_from: new Date(Date.now() - 60 * 1000).toISOString(),
-      valid_until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  const idempotencyKey = `mollie.${runID}.mandate.create`;
+  const body = {
+    subject_reference: subject,
+    external_reference: externalReference,
+    policy: {
+      version: '1',
+      action: MANDATE_ACTION,
+      constraints: [
+        { path: 'payment.currency', operator: 'eq', value: 'EUR' },
+        { path: 'payment.amount', operator: 'max', value: maxAmount },
+      ],
     },
-  });
+    approval_deadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    valid_from: new Date(Date.now() - 60 * 1000).toISOString(),
+    valid_until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  };
+  const mandate = await apiRequest(state, { method: 'POST', path: '/v1/mandates', idempotencyKey, body });
   if (mandate.status !== 201 || typeof mandate.payload?.id !== 'string') {
     throw new Error(`mandate creation failed: ${describeFailure(mandate)}`);
   }
   const mandateID = mandate.payload.id;
+  // Idempotency contract: the identical create replayed under the same key
+  // returns the same Mandate, not a second one.
+  const replay = await apiRequest(state, { method: 'POST', path: '/v1/mandates', idempotencyKey, body });
+  if ((replay.status !== 200 && replay.status !== 201) || replay.payload?.id !== mandateID) {
+    throw new Error(`the mandate create replay broke idempotency: ${describeFailure(replay)}`);
+  }
+  trace('idempotency', `mandate create replayed: same id ${mandateID}, HTTP ${replay.status}.`);
   process.stdout.write(
     `\nMandate created: ${MANDATE_ACTION}, cap ${euroAmount(maxAmount)} (${mandateID}, PENDING_APPROVAL).\n`,
   );
@@ -556,21 +562,35 @@ function newCommitmentPair() {
 
 async function createAuthorization(state, mandateID, runID, label, amount) {
   const pair = newCommitmentPair();
+  const idempotencyKey = `mollie.${runID}.authorization.${label}`;
+  const body = {
+    external_reference: `candidate_${label}_${runID}`,
+    proposed_action: {
+      action: MANDATE_ACTION,
+      attributes: {},
+      payment: { amount, currency: 'EUR' },
+    },
+    execution_window_seconds: EXECUTION_WINDOW_SECONDS,
+    commitment: pair.commitment,
+  };
   const result = await apiRequest(state, {
     method: 'POST',
     path: `/v1/mandates/${mandateID}/authorizations`,
-    idempotencyKey: `mollie.${runID}.authorization.${label}`,
-    body: {
-      external_reference: `candidate_${label}_${runID}`,
-      proposed_action: {
-        action: MANDATE_ACTION,
-        attributes: {},
-        payment: { amount, currency: 'EUR' },
-      },
-      execution_window_seconds: EXECUTION_WINDOW_SECONDS,
-      commitment: pair.commitment,
-    },
+    idempotencyKey,
+    body,
   });
+  // Idempotency contract: the identical authorization replayed under the same
+  // key returns the same decision and never double-reserves.
+  const replay = await apiRequest(state, {
+    method: 'POST',
+    path: `/v1/mandates/${mandateID}/authorizations`,
+    idempotencyKey,
+    body,
+  });
+  if ((replay.status !== 200 && replay.status !== 201) || replay.payload?.id !== result.payload?.id) {
+    throw new Error(`the authorization replay broke idempotency: ${describeFailure(replay)}`);
+  }
+  trace('idempotency', `authorization ${label} replayed: same id ${result.payload?.id}, HTTP ${replay.status}.`);
   return { result, opening: pair.opening };
 }
 
