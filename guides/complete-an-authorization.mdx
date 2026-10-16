@@ -33,9 +33,13 @@ Content-Type: application/json
 {
   "external_action_reference": "booking_91823",
   "provider_transaction_reference": "provider_77401",
-  "reported_accepted_at": "2026-08-10T03:02:41Z"
+  "reported_accepted_at": "2026-08-10T03:02:41Z",
+  "opening": "<64 hex characters>"
 }
 ```
+
+The `opening` must open the `commitment` recorded when the authorization was
+created; otherwise the commit is refused and nothing is recorded.
 
 A successful commit atomically changes the Authorization to `COMMITTED` and its Mandate to `CONSUMED`.
 
