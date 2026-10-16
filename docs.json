@@ -53,7 +53,8 @@
           "guides/generic-executor",
           "guides/connect-payment-method",
           "guides/verify-evidence",
-          "guides/check-the-record"
+          "guides/check-the-record",
+          "guides/webhooks"
         ]
       },
       {

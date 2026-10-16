@@ -1,0 +1,84 @@
+---
+title: "Webhooks"
+description: "Receive signed lifecycle notifications: register an endpoint, verify every delivery, and fetch the proof."
+icon: "webhook"
+---
+
+Outbound webhooks deliver signed lifecycle notifications to your HTTPS
+endpoint: mandate approvals and revocations, authorization outcomes, and the
+rest of the journal. A notification is a trigger, never the proof. It tells
+you something happened; you confirm what happened by fetching current state
+and the evidence bundle.
+
+## Register an endpoint
+
+```
+POST   /v1/webhook-endpoints                  register (secret shown once)
+GET    /v1/webhook-endpoints                  list (never secrets)
+DELETE /v1/webhook-endpoints/{id}             soft delete
+PUT    /v1/webhook-endpoints/{id}/reactivation   disabled -> active
+PUT    /v1/webhook-endpoints/{id}/secret      rotate the signing secret
+```
+
+Up to five non-deleted endpoints per organization. The signing secret is 32
+random bytes, presented exactly once as `att_wh_<base64url>`. Store it
+server-side.
+
+## The delivery
+
+```
+POST <your endpoint>
+Content-Type: application/json
+Attesso-Webhook-Version: 1
+Attesso-Signature: t=1792238400,v1=9f8e...  (hex HMAC-SHA256)
+User-Agent: attesso-webhooks/1
+
+{"id":"evt_...","type":"mandate.approved","occurred_at":"2026-10-16T12:00:00.123456789Z",
+ "data":{"mandate_id":"mnd_...","state":"ACTIVE","version":2}}
+```
+
+The envelope carries the event id, its type, the occurrence time, and the
+cross-references (`mandate_id`, `authorization_id` when the event belongs to
+one, `state` when it names one, `version`). Events that name a state carry
+it; `authorization.committed` and its terminal siblings do not. Journal
+payload contents never cross. Respond 2xx; anything else is a failure and
+the delivery retries.
+
+## Verify every delivery
+
+1. Parse `t` and `v1` from `Attesso-Signature`. `t` is a canonical base-10
+   integer in seconds; `v1` is exactly 64 hex characters.
+2. Check `t` is within 300 seconds of your clock (replay window).
+3. Decode the presented secret: strip the `att_wh_` prefix, base64url-decode
+   the remainder to its 32 raw bytes, and recompute HMAC-SHA256 over the
+   string `t + "." + body` with those raw bytes. Compare in constant time
+   against `v1`.
+
+Verify the exact raw body bytes. A re-serialization changes the bytes and
+breaks the signature. Runnable verifiers with shared vectors:
+
+```bash
+curl -O https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/verify-webhook.js
+curl -O https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/verify-webhook-vectors.json
+node verify-webhook.js verify-webhook-vectors.json
+```
+
+## Retries and disabling
+
+Failures retry with exponential backoff starting at 30 seconds (plus or
+minus 20 percent, about nine attempts over roughly 21 hours). After the
+window the delivery fails terminally and the endpoint's exhausted-delivery
+counter grows. An endpoint that fails 20 attempts in a row or exhausts 10
+deliveries in a row is disabled automatically; reactivate it (counters
+reset) once it is healthy again. Deliveries may arrive more than once:
+deduplicate on the event id. A deleted or disabled endpoint keeps its
+history: deliveries pending at that moment stay recorded and are never
+retried.
+
+## Then fetch state
+
+The notification is not the proof. After verifying the signature, fetch the
+current mandate state and, when you need a durable artifact, the signed
+evidence bundle (`GET /v1/mandates/{mandate_id}/evidence`); confirm the
+event carries the version you acted on. Delivery stops if the worker is
+stopped; state and evidence are the source of truth either way.

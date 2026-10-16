@@ -1,0 +1,95 @@
+{
+  "description": "Shared verification vectors for the published webhook verifiers. A conforming verifier accepts where expect_valid is true and rejects otherwise; every case names the fact it pins.",
+  "vectors": [
+    {
+      "name": "valid-basic",
+      "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "header": "t=1792238400,v1=d9bd0113811d32f52f42bfc490e1951af2786db0fa5a519baa60ddd5cc8f5a8d",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000001\",\"type\":\"mandate.approved\",\"occurred_at\":\"2026-10-16T12:00:00.123456789Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000001\",\"state\":\"ACTIVE\",\"version\":2}}",
+      "now": 1792238460,
+      "window_seconds": 300,
+      "expect_valid": true
+    },
+    {
+      "name": "valid-with-auth-state",
+      "secret_hex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "header": "t=1792260000,v1=b702835b4a93ec57a89d849c307f9d368080daadc8cc3c04eb234cf376d4127a",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000002\",\"type\":\"authorization.created\",\"occurred_at\":\"2026-10-16T13:00:00.5Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000002\",\"authorization_id\":\"aut_VECTOR0000000000000000000002\",\"state\":\"RESERVED\",\"version\":3}}",
+      "now": 1792260010,
+      "window_seconds": 300,
+      "expect_valid": true
+    },
+    {
+      "name": "tampered-body",
+      "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "header": "t=1792238400,v1=d9bd0113811d32f52f42bfc490e1951af2786db0fa5a519baa60ddd5cc8f5a8d",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000001\",\"type\":\"mandate.approved\",\"occurred_at\":\"2026-10-16T12:00:00.123456789Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000001\",\"state\":\"ACTIVE\",\"version\":9}}",
+      "now": 1792238460,
+      "window_seconds": 300,
+      "expect_valid": false
+    },
+    {
+      "name": "tampered-timestamp",
+      "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "header": "t=1792238500,v1=d9bd0113811d32f52f42bfc490e1951af2786db0fa5a519baa60ddd5cc8f5a8d",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000001\",\"type\":\"mandate.approved\",\"occurred_at\":\"2026-10-16T12:00:00.123456789Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000001\",\"state\":\"ACTIVE\",\"version\":2}}",
+      "now": 1792238460,
+      "window_seconds": 300,
+      "expect_valid": false
+    },
+    {
+      "name": "stale-timestamp",
+      "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "header": "t=1792234800,v1=e4b625ec22be3fc8653d4e466429b58b615903170299df1f03f07ee2a919266e",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000001\",\"type\":\"mandate.approved\",\"occurred_at\":\"2026-10-16T12:00:00.123456789Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000001\",\"state\":\"ACTIVE\",\"version\":2}}",
+      "now": 1792238460,
+      "window_seconds": 300,
+      "expect_valid": false
+    },
+    {
+      "name": "future-outside-window",
+      "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "header": "t=1792242000,v1=31cc2c36c33a2d12e34458c727ff0701ec0319eaa9e6dec38bbe6f8011bb428b",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000001\",\"type\":\"mandate.approved\",\"occurred_at\":\"2026-10-16T12:00:00.123456789Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000001\",\"state\":\"ACTIVE\",\"version\":2}}",
+      "now": 1792238460,
+      "window_seconds": 300,
+      "expect_valid": false
+    },
+    {
+      "name": "wrong-secret",
+      "secret_hex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "header": "t=1792238400,v1=d9bd0113811d32f52f42bfc490e1951af2786db0fa5a519baa60ddd5cc8f5a8d",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000001\",\"type\":\"mandate.approved\",\"occurred_at\":\"2026-10-16T12:00:00.123456789Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000001\",\"state\":\"ACTIVE\",\"version\":2}}",
+      "now": 1792238460,
+      "window_seconds": 300,
+      "expect_valid": false
+    },
+    {
+      "name": "trailing-junk-hex",
+      "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "header": "t=1792238400,v1=d9bd0113811d32f52f42bfc490e1951af2786db0fa5a519baa60ddd5cc8f5a8dzz",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000001\",\"type\":\"mandate.approved\",\"occurred_at\":\"2026-10-16T12:00:00.123456789Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000001\",\"state\":\"ACTIVE\",\"version\":2}}",
+      "now": 1792238460,
+      "window_seconds": 300,
+      "expect_valid": false
+    },
+    {
+      "name": "non-canonical-t",
+      "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "header": "t=1e3,v1=785d3669bb43585d932937de9e02b243b6b8c2a6a6e8e616f39298a60c7dba1c",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000001\",\"type\":\"mandate.approved\",\"occurred_at\":\"2026-10-16T12:00:00.123456789Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000001\",\"state\":\"ACTIVE\",\"version\":2}}",
+      "now": 1000,
+      "window_seconds": 300,
+      "expect_valid": false
+    },
+    {
+      "name": "plus-signed-t",
+      "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "header": "t=+1792238400,v1=d9bd0113811d32f52f42bfc490e1951af2786db0fa5a519baa60ddd5cc8f5a8d",
+      "body": "{\"id\":\"evt_VECTOR0000000000000000000001\",\"type\":\"mandate.approved\",\"occurred_at\":\"2026-10-16T12:00:00.123456789Z\",\"data\":{\"mandate_id\":\"mnd_VECTOR0000000000000000000001\",\"state\":\"ACTIVE\",\"version\":2}}",
+      "now": 1792238460,
+      "window_seconds": 300,
+      "expect_valid": false
+    }
+  ]
+}
