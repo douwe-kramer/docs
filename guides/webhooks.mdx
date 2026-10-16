@@ -22,7 +22,9 @@ PUT    /v1/webhook-endpoints/{id}/secret      rotate the signing secret
 
 Up to five non-deleted endpoints per organization. The signing secret is 32
 random bytes, presented exactly once as `att_wh_<base64url>`. Store it
-server-side.
+server-side. After a secret rotation, retries and new deliveries are signed
+with the new secret; update your receiver promptly, and note that failed
+verifications count toward the endpoint's failure budget.
 
 ## The delivery
 
@@ -71,9 +73,9 @@ window the delivery fails terminally and the endpoint's exhausted-delivery
 counter grows. An endpoint that fails 20 attempts in a row or exhausts 10
 deliveries in a row is disabled automatically; reactivate it (counters
 reset) once it is healthy again. Deliveries may arrive more than once:
-deduplicate on the event id. A deleted or disabled endpoint keeps its
-history: deliveries pending at that moment stay recorded and are never
-retried.
+deduplicate on the event id. A disabled endpoint's pending deliveries are
+frozen and resume on reactivation; a deleted endpoint keeps its history
+with those deliveries recorded and never retried.
 
 ## Then fetch state
 
