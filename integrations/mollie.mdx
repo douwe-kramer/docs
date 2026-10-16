@@ -4,7 +4,7 @@ description: "Execute an approved Attesso action on Mollie and report finality."
 icon: "euro"
 ---
 
-Take an `ALLOW` from Attesso and execute it on Mollie as a payment, then report the outcome. This is the Mollie recipe for the pattern in [Bind an authorization to your PSP](../guides/bind-to-your-psp).
+Take an `ALLOW` from Attesso and execute it on Mollie as a payment, then report the outcome. This is the Mollie recipe for the pattern in [Bind an authorization to your PSP](../guides/bind-to-your-psp): authorize first, execute second, report finality. Attesso authorizes; the integrator executes. Attesso never calls Mollie.
 
 API host: `https://api.mollie.com/v2`. Test mode uses a `test_` API key (or the `testmode` parameter with an organization access token); test and live data are fully isolated. Mollie's test mode supports EUR only.
 
@@ -23,7 +23,7 @@ const payment = await (await fetch('https://api.mollie.com/v2/payments', {
     'Idempotency-Key': 'booking-2026-08-04-001',             // your external_action_reference
   },
   body: JSON.stringify({
-    amount: { currency: 'EUR', value: '189.00' },            // decimal string, minor units / 100
+    amount: { currency: 'EUR', value: '189.00' },            // decimal string: EUR 189.00
     description: 'Attesso booking 2026-08-04-001',
     redirectUrl: 'https://your-app.example/mollie/return',
     webhookUrl: 'https://your-app.example/mollie/webhook',   // must be publicly reachable; Mollie validates at creation
@@ -46,7 +46,11 @@ Keep the request derived from the authorized action: same amount, same currency,
 
 ## Webhooks
 
-Mollie posts only the payment `id` (form-encoded) to the `webhookUrl` you set on creation; fetch the payment yourself and act on its state. Respond `200 OK` immediately, before processing. Mollie retries failed deliveries ten times over about 26 hours. The webhook is a trigger, never the proof: trust the fetch.
+One rule covers both flows in this loop: a notification is a trigger, never the proof.
+
+**From Mollie.** Mollie posts only the payment `id` (form-encoded) to the `webhookUrl` you set on creation; fetch the payment yourself and act on its state. Respond `200 OK` immediately, before processing. Mollie retries failed deliveries ten times over about 26 hours.
+
+**From Attesso.** Attesso delivers signed lifecycle notifications: mandate approvals and revocations, authorization outcomes, and the rest of the journal. Register an endpoint with [Webhooks](../guides/webhooks), verify every delivery, then fetch current state and the signed evidence bundle.
 
 ## Reconcile a lost response
 
@@ -58,20 +62,19 @@ The full decision table is in [Reconcile authorization outcomes](../guides/recon
 
 ## Test mode
 
-- Selecting **paid** in the test checkout completes the payment and returns the payer to `redirectUrl`; that drive works on a payment created without a pinned method (iDEAL walkthrough; verified 2026-10-15).
-- To exercise a **failed** payment (definite non-acceptance), pin the method at creation (`"method": "creditcard"`) and use a documented magic amount from Mollie's testing reference, for example `1007.00` -> `insufficient_funds`. Driving the card form with a test card and selecting **Failed** on the status screen lands the payment `failed` with the matching `failureReason`, and the checkout redirects to `redirectUrl` like any other outcome (verified 2026-10-15, with a webhook attached).
-- A payment created without a fixed method returned non-paid selections to the method selector and stayed `open` (observed 2026-10-15); pinning the method sidesteps that. Open test payments are not cancelable via the API (`isCancelable: false`; `DELETE /payments/{id}` -> 422).
-- Test card numbers and the magic-amount table: `docs.mollie.com/reference/testing`. On paid test payments, and for recurring test payments, Mollie adds a `changePaymentState` link for testing refunds and chargebacks.
+Verified against Mollie test mode (Oct 2026):
+
+- Selecting **paid** in the test checkout completes the payment and returns the payer to `redirectUrl`.
+- To exercise a **failed** payment, pin `"method": "creditcard"` at creation and use a documented magic amount from [Mollie's testing reference](https://docs.mollie.com/reference/testing), for example `1007.00` -> `insufficient_funds`, then select **Failed** on the status screen. A payment created without a pinned method bounces non-paid selections back to method selection and stays `open`; open test payments are not cancelable via the API (`DELETE /payments/{id}` -> 422).
+- On paid test payments, Mollie adds a `changePaymentState` link for testing refunds and chargebacks.
 
 ## Rehearsal
 
-This [rehearsal harness](https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/mollie-e2e.mjs) drives the whole loop end to end against this recipe:
+[mollie-e2e.mjs](https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/mollie-e2e.mjs) drives the full loop against this recipe: Mandate create, passkey approval, an over-cap DENY, an in-cap ALLOW executed as a Mollie test payment, then commit (paid) or cancel (failed), with the signed evidence verified locally. Every create is replayed under its idempotency key first, and the replay must return the same resource. Settle each printed checkout URL in a browser; pass `MOLLIE_WEBHOOK_URL` (a public tunnel URL ending in `/mollie-webhook`) to exercise real webhook delivery, or leave it unset to settle by polling.
 
 ```zsh
 curl -O https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/mollie-e2e.mjs
 MOLLIE_API_KEY=test_... node mollie-e2e.mjs
 ```
 
-It creates a Mandate and approves it with a passkey, shows an over-cap attempt refused, commits one in-cap action through a Mollie test payment, then runs a second loop where the payment is failed and the authorization is cancelled, verifying the signed evidence locally each time. Every Mandate and Authorization create is replayed under the same idempotency key first, and the replay must return the same resource. Settle each printed checkout URL in a browser: the test-mode status screen decides the payment's final state. The script plays the integrator for the proof; Attesso itself never calls executor APIs. Pass `MOLLIE_WEBHOOK_URL` (a public tunnel URL ending in `/mollie-webhook`) to exercise real webhook delivery, or leave it unset to settle by polling.
-
-To run it fully unattended, [mollie-e2e-drive.mjs](https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/mollie-e2e-drive.mjs) wraps the harness and plays both browser walks with Playwright: a virtual passkey for the approval and the test checkout for the payment. It needs Playwright (`npm install playwright`), and `node mollie-e2e-drive.mjs --runs 3` completes three full two-phase loops without a human at the keyboard.
+[mollie-e2e-drive.mjs](https://raw.githubusercontent.com/douwe-kramer/docs/main/examples/mollie-e2e-drive.mjs) wraps the harness with Playwright: a virtual passkey for the approval, scripted checkout walks. `node mollie-e2e-drive.mjs --runs 3` completes three full loops without a human at the keyboard. It needs Playwright installed.
