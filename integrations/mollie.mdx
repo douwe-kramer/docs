@@ -4,7 +4,7 @@ description: "Execute an approved Attesso action on Mollie and report finality."
 icon: "euro"
 ---
 
-Take an `ALLOW` from Attesso and execute it on Mollie as a payment, then report the outcome. This is the Mollie recipe for the pattern in [Bind an authorization to your PSP](../guides/bind-to-your-psp): authorize first, execute second, report finality. Attesso authorizes; the integrator executes. Attesso never calls Mollie.
+Take an `ALLOW` from Attesso and execute it on Mollie as a payment, then report the outcome. This is the Mollie recipe for the pattern in [Bind an authorization to your PSP](../guides/bind-to-your-psp): authorize first, execute second, report finality. Attesso authorizes and records; your backend calls Mollie to execute, then reports the outcome to Attesso. Attesso never calls Mollie.
 
 API host: `https://api.mollie.com/v2`. Test mode uses a `test_` API key and live uses `live_` (or the `testmode` parameter with an organization access token); test and live data are fully isolated. Mollie's test mode supports EUR only.
 
