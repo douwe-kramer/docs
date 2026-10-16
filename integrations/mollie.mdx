@@ -6,9 +6,7 @@ icon: "euro"
 
 Take an `ALLOW` from Attesso and execute it on Mollie as a payment, then report the outcome. This is the Mollie recipe for the pattern in [Bind an authorization to your PSP](../guides/bind-to-your-psp): authorize first, execute second, report finality. Attesso authorizes; the integrator executes. Attesso never calls Mollie.
 
-API host: `https://api.mollie.com/v2`. Mollie issues API keys in pairs per profile: the `test_` key for test mode and the `live_` key for live payments (with an organization access token, pass the `testmode` parameter instead). Test and live data are fully isolated. Mollie's test mode supports EUR only.
-
-Both modes use the same calls. Test mode works before your account is activated; live payments settle real funds and require the account to be activated first (Mollie onboarding: business profile and payment methods). Method availability is per profile and can differ between test and live.
+API host: `https://api.mollie.com/v2`. Test mode uses a `test_` API key and live uses `live_` (or the `testmode` parameter with an organization access token); test and live data are fully isolated. Mollie's test mode supports EUR only.
 
 New to Attesso? The [quickstart](../quickstart) covers creating a workspace, a test key, and the approval trust this recipe assumes.
 
