@@ -8,18 +8,29 @@ icon: "shapes"
 
 A Mandate is an immutable statement of what one authenticated end user approved. If the authority changes, create and approve a new Mandate rather than mutating the old one.
 
-Every Mandate contains an opaque `subject_reference`, one policy, an approval deadline, and a validity window of at most 30 days.
+Every Mandate contains an opaque `subject_reference`, one policy, an approval deadline, and a validity window. A single-use term runs up to 30 days. A recurring term is exactly its period schedule, up to 400 days.
 
 | State | Meaning |
 | --- | --- |
 | `PENDING_APPROVAL` | Created but not approved |
 | `SCHEDULED` | Approved and starts later |
 | `ACTIVE` | Eligible for evaluation |
-| `CONSUMED` | One allowed execution was committed |
+| `CONSUMED` | A single-use Mandate whose allowed execution was committed |
 | `REVOKED` | Permanently withdrawn |
 | `EXPIRED` | Approval or validity deadline passed |
 
 `CONSUMED`, `REVOKED`, and `EXPIRED` are terminal.
+
+## Execution modes
+
+A Mandate is `SINGLE_USE` or `RECURRING`.
+
+| Mode | Authority |
+| --- | --- |
+| `SINGLE_USE` (default) | One authorized execution. Commit consumes the Mandate. |
+| `RECURRING` | Repeated authorized executions, each bounded by the per-period budget. Commit keeps the Mandate `ACTIVE` until the term ends. |
+
+A recurring Mandate names its cadence with `period_unit` and `period_count`; each period's spend is capped by `period_max_amount` in `period_currency`. The period a charge is attributed to is chosen at reservation time and recorded on the Authorization as `period_index`. Period terms are part of the approved authority; an execution whose terms no longer match the approved terms is denied.
 
 ## Authorizations
 
@@ -38,7 +49,7 @@ An `ALLOW` starts in `RESERVED`. It may become `COMMITTED`, `CANCELLED`, or `EXP
 - A Mandate may evaluate many candidates but can have only one active reservation.
 - Concurrent eligible requests cannot both reserve it.
 - Cancellation or reservation expiry permits a later eligible attempt.
-- Commit permanently consumes the Mandate.
+- Commit permanently consumes a `SINGLE_USE` Mandate; a `RECURRING` Mandate stays `ACTIVE` until its term ends.
 - `can_execute` is true only for an unexpired `ALLOW` reservation.
 
 <Warning>

@@ -37,10 +37,13 @@ const payment = await (await fetch('https://api.mollie.com/v2/payments', {
 
 Keep the request derived from the authorized action: same amount, same currency, same reference. Mollie validates `webhookUrl` reachability at creation (a loopback URL is rejected); in local development point it at a public tunnel.
 
+The loop runs once per Authorization. Under a [RECURRING mandate](../concepts/core-model), every execution takes this same authorize, execute, report path, each one counted against the mandate's per-period budget.
+
 ## Report the outcome to Attesso
 
 - Definite acceptance (`paid`, or `authorized` for manually captured methods): commit with `provider_transaction_reference: payment.id`.
 - Definite non-acceptance (`failed`, `expired`, `canceled`): cancel with `reason: EXECUTION_FAILED` (use `EXECUTOR_REJECTED` when Mollie refuses the action outright). With an earlier ALLOW, the disposition is `NO_LONGER_POSSIBLE`.
+- A refund after commit is not an authorization transition; report it so the signed evidence carries the claim ([Refund reports](../guides/reconcile-authorizations#refund-reports)).
 - `open`, `pending` (or a still-open checkout): not final; do not commit or cancel yet.
 - A timeout or lost response: reconcile before deciding (below).
 
