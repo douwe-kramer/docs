@@ -32,6 +32,43 @@ A Mandate is `SINGLE_USE` or `RECURRING`.
 
 A recurring Mandate names its cadence with `period_unit` and `period_count`; each period's spend is capped by `period_max_amount` in `period_currency`. The period a charge is attributed to is chosen at reservation time and recorded on the Authorization as `period_index`. Period terms are part of the approved authority; an execution whose terms no longer match the approved terms is denied.
 
+### Recurring terms
+
+- `period_unit`: `CALENDAR_MONTH` snaps to the first of the month, `ANCHORED_MONTH` keeps the anchor's day, and `FIXED_DAYS` is a fixed day count.
+- `period_days`: required only for `FIXED_DAYS`.
+- `period_count`: the number of periods the term covers.
+- `period_max_amount` and `period_currency`: the most that may be reserved in any one period, in minor units.
+- `valid_until` must be exactly the end of the final period, and the whole term may not exceed 400 days.
+
+A complete request for three 30-day periods, each capped at EUR 500.00:
+
+```json
+{
+  "subject_reference": "user_8842",
+  "external_reference": "cloud-budget-2026-11",
+  "policy": {
+    "version": "1",
+    "action": "compute.reserve",
+    "constraints": [
+      { "path": "attributes.resource_class", "operator": "eq", "value": "reserved-gpu" },
+      { "path": "payment.amount", "operator": "max", "value": 50000 },
+      { "path": "payment.currency", "operator": "eq", "value": "EUR" }
+    ]
+  },
+  "approval_deadline": "2026-10-18T00:00:00Z",
+  "valid_from": "2026-11-01T00:00:00Z",
+  "valid_until": "2027-01-30T00:00:00Z",
+  "execution_mode": "RECURRING",
+  "period_unit": "FIXED_DAYS",
+  "period_days": 30,
+  "period_count": 3,
+  "period_max_amount": 50000,
+  "period_currency": "EUR"
+}
+```
+
+Each purchase is checked against the policy cap and the remaining budget of its period. A charge that would push a period past `period_max_amount` is denied with `PERIOD_LIMIT_EXCEEDED`; the next period starts with its own budget when its time arrives.
+
 ## Authorizations
 
 An Authorization is the durable result of evaluating one proposed action. Every structurally valid evaluation creates one, including non-allow results.

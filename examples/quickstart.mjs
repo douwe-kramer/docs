@@ -45,7 +45,7 @@ const DEMO_DENY_AMOUNT = 32000; // minor units: EUR 320.00, deliberately above t
 const DEMO_ALLOW_AMOUNT = 18900; // minor units: EUR 189.00, within the cap
 const EXECUTION_WINDOW_SECONDS = 300;
 const POLL_INTERVAL_MS = 2000;
-const RETURN_WAIT_MS = 10 * 60 * 1000;
+const RETURN_WAIT_MS = 5 * 60 * 1000 + 30 * 1000; // the approval session itself expires after five minutes
 const MANDATE_WAIT_MS = 10 * 60 * 1000;
 const RETURN_GRACE_MS = 15 * 1000; // let the browser's countdown land after the run
 
@@ -436,10 +436,10 @@ async function waitForMandateActive(state, mandateID) {
       return result.payload;
     }
     if (lastName !== 'PENDING_APPROVAL' && lastName !== 'SCHEDULED') {
-      throw new Error(`the Mandate ended as ${lastName}; approve within the 15-minute window next time`);
+      throw new Error(`the Mandate ended as ${lastName}; approve within the five-minute approval window next time`);
     }
     if (Date.now() > deadline) {
-      throw new Error('timed out waiting for the approval; approval sessions last 15 minutes');
+      throw new Error('timed out waiting for the approval; approval sessions last five minutes, so run the script again');
     }
     await sleep(POLL_INTERVAL_MS);
   }

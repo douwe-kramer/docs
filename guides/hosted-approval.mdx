@@ -41,6 +41,8 @@ const { kty, crv, x, y } = await crypto.subtle.exportKey('jwk', key); // add use
 
 The registered JWK must be the **public** key that corresponds to the exact private key you sign with. Give it a stable `kid` and reference that same `kid` in the assertion header.
 
+Approval trust is workspace-wide and per environment: one identity issuer and one return origin, with one or two ES256 public keys for rotation. A second registration with different values is refused with `409 APPROVAL_TRUST_ALREADY_REGISTERED`. If you run several agent products, give each its own workspace when they need distinct approval brands or return origins; keys rotate in place, but the issuer and origin do not.
+
 ## Identity assertion contract
 
 The compact JWS must use:

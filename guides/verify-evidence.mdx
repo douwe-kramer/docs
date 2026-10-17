@@ -271,6 +271,35 @@ if __name__ == "__main__":
 - Reservation, commit, cancellation, revocation, and expiry events
 - Source-labelled lifecycle assertions supplied by your platform
 
+### Event shape
+
+Each event is `{sequence, type, resource_version, payload, created_at}`. Decision data lives inside `payload`, so a charge's period is `event.payload.period_index`, not `event.period_index`.
+
+```json
+{
+  "sequence": 6,
+  "type": "authorization.created",
+  "resource_version": 1,
+  "payload": {
+    "state": "RESERVED",
+    "reason": { "code": "POLICY_MATCH" },
+    "decision": "ALLOW",
+    "commitment": "sha256:c7ddea89b49c1f3de096be168978078436da74f516bc4b6a5f0ceb4bb6668d1b",
+    "period_index": 0,
+    "execute_before": "2026-10-17T18:04:07.143999Z",
+    "proposed_action": {
+      "action": "compute.reserve",
+      "payment": { "amount": 30000, "currency": "EUR" },
+      "attributes": { "resource_class": "reserved-gpu" }
+    },
+    "authorization_id": "aut_JKBZGK3A4PLEL53SRRXKNHPOHQ"
+  },
+  "created_at": "2026-10-17T17:59:07.160469Z"
+}
+```
+
+Timestamps carry six fractional digits. `Date.parse` keeps milliseconds, so compare instants rather than strings when you mix precisions.
+
 ### Reconstructing per-period spend
 
 A recurring Mandate carries `execution_mode`, the period terms (`period_unit`, `period_days`, `period_count`, `period_max_amount`, `period_currency`, `period_anchor`), and `authorized_terms_digest`. Every `authorization.created` event for an approved charge carries `period_index`.

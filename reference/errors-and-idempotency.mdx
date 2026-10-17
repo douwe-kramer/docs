@@ -14,18 +14,11 @@ Attesso uses `application/problem+json` when it supplies an error body.
   "code": "MACHINE_READABLE_CODE",
   "detail": "Human-readable detail",
   "request_id": "req_01J2ABCDEF",
-  "retryable": false,
-  "errors": [
-    {
-      "pointer": "/policy/constraints/0/value",
-      "code": "FIELD_ERROR_CODE",
-      "message": "Human-readable field detail"
-    }
-  ]
+  "retryable": false
 }
 ```
 
-Branch on `code`, `retryable`, and field pointers. Do not branch on human-readable messages.
+Branch on `code` and `retryable`. The API does not send field-level pointers; `detail` names the rule that failed, so fix the request from it. Do not branch on human-readable text.
 
 ## Status handling
 

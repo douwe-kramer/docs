@@ -6,24 +6,12 @@ icon: "list-checks"
 
 Your backend translates end-user intent into a structured policy. Attesso does not evaluate prompts, scripts, natural language, or provider-specific rules.
 
-```json
-{
-  "version": "1",
-  "action": "flight.book",
-  "constraints": [
-    { "path": "attributes.origin", "operator": "eq", "value": "AMS" },
-    { "path": "attributes.destination", "operator": "in", "values": ["LIS", "JFK"] },
-    {
-      "path": "attributes.departureDate",
-      "operator": "date_range",
-      "on_or_after": "2026-08-01",
-      "on_or_before": "2026-08-14"
-    },
-    { "path": "payment.amount", "operator": "max", "value": 15000 },
-    { "path": "payment.currency", "operator": "eq", "value": "EUR" }
-  ]
-}
-```
+## Paths and names
+
+- **Action**: lowercase, dot-separated segments. Each segment starts with a letter and continues with lowercase letters, digits, or underscores: `flight.book`, `payout.release`, `compute.reserve`. Maximum 100 characters.
+- **Attribute names**: start with a letter, then letters, digits, or underscores, up to 64 characters. A proposed action carries at most 32 attributes.
+- **Constraint paths**: `attributes.<name>`, `payment.amount`, or `payment.currency`. A policy carries 1 to 32 constraints, at most one per path.
+- **Attribute values**: strings, integers, or booleans. Dates are `YYYY-MM-DD` strings.
 
 ## Operators
 
@@ -40,11 +28,66 @@ All constraints use logical `AND`, and exactly one constraint may target each pa
 
 - A present value that violates a constraint produces `DENY`.
 - Missing, incorrectly typed, or unsupported data produces `INDETERMINATE`.
-- Neither result creates a reservation.
+- Neither result creates a reservation, and `can_execute` is false for both.
 - A different valid action name produces `DENY` without evaluating unrelated constraints.
 
 ## Payment authority
 
-A policy either has no payment paths, or exactly one positive `payment.amount` `max` and one uppercase `payment.currency` `eq`. Amounts use integer minor units, so `15000` means EUR 150.00.
+A policy either has no payment paths, or exactly one positive `payment.amount` with operator `max` (a cap) or `eq` (an exact amount), plus one uppercase three-letter `payment.currency` with operator `eq`. Amounts use integer minor units, so `15000` means EUR 150.00. A policy with no payment paths authorizes only proposed actions that carry no `payment`.
+
+## Example: booking
+
+One city, a check-in window, and a price cap. The dates are inclusive, so `2026-11-01` and `2026-11-30` are both inside the window.
+
+```json
+{
+  "version": "1",
+  "action": "booking.create",
+  "constraints": [
+    { "path": "attributes.city", "operator": "eq", "value": "Amsterdam" },
+    {
+      "path": "attributes.check_in",
+      "operator": "date_range",
+      "on_or_after": "2026-11-01",
+      "on_or_before": "2026-11-30"
+    },
+    { "path": "payment.amount", "operator": "max", "value": 45000 },
+    { "path": "payment.currency", "operator": "eq", "value": "EUR" }
+  ]
+}
+```
+
+## Example: payout
+
+One contractor from an allowlist, one milestone, and the exact agreed amount. `eq` on the amount means a different amount is refused, even when it is lower.
+
+```json
+{
+  "version": "1",
+  "action": "payout.release",
+  "constraints": [
+    { "path": "attributes.contractor", "operator": "in", "values": ["ctr_anika", "ctr_boris"] },
+    { "path": "attributes.milestone", "operator": "eq", "value": "ms_2" },
+    { "path": "payment.amount", "operator": "eq", "value": 150000 },
+    { "path": "payment.currency", "operator": "eq", "value": "EUR" }
+  ]
+}
+```
+
+## Example: recurring budget
+
+A subscription budget caps each purchase here; the monthly cadence and the per-period budget are Mandate terms, not policy constraints. See [Core model](/concepts/core-model#execution-modes) for the full RECURRING request.
+
+```json
+{
+  "version": "1",
+  "action": "compute.reserve",
+  "constraints": [
+    { "path": "attributes.resource_class", "operator": "eq", "value": "reserved-gpu" },
+    { "path": "payment.amount", "operator": "max", "value": 50000 },
+    { "path": "payment.currency", "operator": "eq", "value": "EUR" }
+  ]
+}
+```
 
 Policy arrays are digest-significant. Preserve constraint order and the order of values inside `in` constraints.
