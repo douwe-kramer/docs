@@ -45,8 +45,7 @@ const DEMO_DENY_AMOUNT = 32000; // minor units: EUR 320.00, deliberately above t
 const DEMO_ALLOW_AMOUNT = 18900; // minor units: EUR 189.00, within the cap
 const EXECUTION_WINDOW_SECONDS = 300;
 const POLL_INTERVAL_MS = 2000;
-const RETURN_WAIT_MS = 5 * 60 * 1000 + 30 * 1000; // the approval session itself expires after five minutes
-const MANDATE_WAIT_MS = 10 * 60 * 1000;
+const APPROVAL_WAIT_MS = 5 * 60 * 1000 + 30 * 1000; // the approval session itself expires after five minutes
 const RETURN_GRACE_MS = 15 * 1000; // let the browser's countdown land after the run
 
 const SELFTEST_ISSUER = 'urn:example:quickstart';
@@ -421,7 +420,7 @@ function openApprovalPage(url) {
 }
 
 async function waitForMandateActive(state, mandateID) {
-  const deadline = Date.now() + MANDATE_WAIT_MS;
+  const deadline = Date.now() + APPROVAL_WAIT_MS;
   let lastName = '';
   for (;;) {
     const result = await apiRequest(state, { method: 'GET', path: `/v1/mandates/${mandateID}` });
@@ -690,8 +689,8 @@ async function run(options) {
             approved.then((value) => ({ kind: 'returned', value })),
             becameActive,
           ]),
-          RETURN_WAIT_MS,
-          'no approval within 10 minutes; run the script again to start over',
+          APPROVAL_WAIT_MS,
+          'no approval within five minutes; run the script again to start over',
         );
       } catch (error) {
         if (server.listening) {
