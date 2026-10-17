@@ -135,9 +135,8 @@ Register the endpoint and its key in the Worldline Configuration Center. There
 is no API for it. The endpoint must answer a GET validation by echoing
 `X-GCS-Webhooks-Endpoint-Verification`, and a POST with 2xx within 10 seconds.
 
-Delivery is asynchronous, seconds to hours. Do not use a webhook to drive the
-checkout UI. Poll `Get hosted checkout` on return and treat the webhook as
-later authority.
+Delivery is asynchronous. Do not use a webhook to drive the checkout UI. Poll
+`Get hosted checkout` on return and treat the webhook as later authority.
 
 ## Limits, measured on preproduction (Oct 2026)
 
