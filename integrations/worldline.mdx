@@ -1,0 +1,190 @@
+---
+title: "Worldline"
+description: "Execute an approved Attesso authorization on Worldline's hosted checkout and report finality."
+icon: "network"
+---
+
+Take an `ALLOW` from Attesso and execute it on Worldline's MyCheckout hosted
+payment page, then report the outcome. This is the Worldline recipe for the
+pattern in [Bind an authorization to your PSP](../guides/bind-to-your-psp):
+authorize first, execute second, report finality. Attesso authorizes and
+records. Your backend calls Worldline to execute, then reports the outcome to
+Attesso. Attesso never calls Worldline.
+
+API host: `https://api.preprod.connect.worldline-solutions.com` for
+preproduction, `https://api.connect.worldline-solutions.com` for production.
+Hosted checkout runs on the Global Collect platform and every server request
+is HMAC-signed. Use the official SDK (`connect-sdk-nodejs`) instead of
+hand-rolling the signature.
+
+New to Attesso? The [quickstart](../quickstart) covers creating a workspace,
+a test key, and the approval trust this recipe assumes.
+
+## Create the hosted checkout
+
+Create it from the same immutable proposed action you sent to
+`/authorizations`. Only call Worldline when the decision is `ALLOW` and
+`can_execute` is true.
+
+```js
+import * as connectSdk from 'connect-sdk-nodejs';
+
+const client = connectSdk.init({
+  host: process.env.WORLDLINE_HOST,          // api.preprod.connect.worldline-solutions.com
+  scheme: 'https', port: 443,
+  apiKeyId: process.env.WORLDLINE_API_KEY_ID,
+  secretApiKey: process.env.WORLDLINE_API_SECRET, // server-side only
+  integrator: 'YourCompany',
+});
+
+const { body } = await client.v1.hostedcheckouts.create(
+  process.env.WORLDLINE_MERCHANT_ID,
+  {
+    order: {
+      amountOfMoney: { amount: 14000, currencyCode: 'EUR' }, // minor units
+      customer: {
+        billingAddress: { countryCode: 'NL' },
+        merchantCustomerId: 'your-customer-id',               // at most 15 characters
+      },
+      // The Attesso authorization id is exactly 30 characters and fits the limit.
+      references: { merchantReference: 'aut_...' },
+    },
+    hostedCheckoutSpecificInput: {
+      returnUrl: 'https://your-app.example/worldline/return', // public HTTPS
+      showResultPage: false,
+      locale: 'en_GB',
+      paymentProductFilters: { restrictTo: { products: [1] } }, // Visa only
+    },
+  },
+);
+
+const redirect = 'https://payment.' + body.partialRedirectUrl;
+// body.hostedCheckoutId and body.RETURNMAC identify the session.
+```
+
+One product in `paymentProductFilters.restrictTo.products` skips the payment
+product picker and lands on the card form. Two products show the picker.
+Redirect the payer to `redirect`.
+
+## Read the result
+
+Worldline appends `hostedCheckoutId` and `RETURNMAC` to the return URL. The
+redirect is not proof. Read the session server-side:
+
+```js
+const status = await client.v1.hostedcheckouts.get(merchantId, hostedCheckoutId);
+const payment = status.body.createdPaymentOutput?.payment;
+```
+
+Map the payment state, not the checkout state:
+
+| Worldline payment status | Meaning for Attesso |
+|---|---|
+| `PENDING_APPROVAL`, `isAuthorized: true` | Accepted. Commit with `provider_transaction_reference: payment.id`. Capture is asynchronous. |
+| `CAPTURE_REQUESTED`, `CAPTURED`, `PAID`, `COMPLETED` | Accepted. Commit if not already committed. |
+| `REJECTED`, `CANCELLED` | Not accepted. Cancel with `reason: EXECUTION_FAILED` and `NO_LONGER_POSSIBLE`. |
+| `REDIRECTED`, `PENDING_PAYMENT` | Not final. Keep polling. |
+
+`PENDING_APPROVAL` is the normal acceptance state for a card on a delayed
+capture merchant. Waiting for `PAID` leaves the loop hanging, because capture
+can settle minutes or days later.
+
+## Close the loop
+
+- **Mandate revoked after the card was authorized.** Void the payment with
+  `payments.cancel`, assert `CANCELLED`, then close the Attesso side.
+  `payments.cancelapproval` returns `SET_PAYMENT_NOT_CANCELLABLE` and is not a
+  void.
+- **Consumer cancels on the page.** Create the session with
+  `returnCancelState: true`. The checkout status becomes
+  `CANCELLED_BY_CONSUMER` and no payment exists. Cancel the Attesso
+  authorization.
+- **The execution window closes first.** Delete the hosted checkout
+  (`DELETE /v1/{merchantId}/hostedcheckouts/{hostedCheckoutId}`, 204) before
+  `execute_before`. A late commit is refused with 409
+  `RESOURCE_STATE_CONFLICT`; the authorization is already terminal.
+- **Refunds.** Only after capture. At `PENDING_APPROVAL` Worldline returns
+  `ORDER_WITHOUT_REFUNDABLE_PAYMENTS`; at `CAPTURE_REQUESTED` it accepts a
+  refund that sits `REFUND_REQUESTED`.
+
+## Reconcile a lost response
+
+Create Hosted Checkout is **not idempotent**. The same
+`X-GCS-Idempotence-Key` creates a second session. One authorization means one
+create, and a create whose response was lost is not retried.
+
+Recover by merchant reference instead: the Worldline payment carries the
+`merchantReference` you set, and the webhook does too. Read the payment by id
+or match the reference in the payment list.
+
+## Webhooks
+
+Worldline posts an event envelope with the full object:
+`payment.created`, `payment.pending_approval`, `payment.capture_requested`,
+`payment.captured`, `payment.paid`, `payment.completed`, `payment.rejected`,
+`payment.cancelled`, and the rest. Two headers carry the proof:
+
+- `X-GCS-Signature`: HMAC-SHA256 of the raw body, base64 encoded.
+- `X-GCS-KeyId`: the webhooks key used.
+
+Verify the signature over the raw bytes before parsing. The SDK helper is
+`connectSdk.webhooks.v1.init(store).unmarshal(rawBody, headers)`; the store
+only needs `getSecretKey(keyId)`.
+
+Register the endpoint and its key in the Worldline Configuration Center. There
+is no API for it. The endpoint must answer a GET validation by echoing
+`X-GCS-Webhooks-Endpoint-Verification`, and a POST with 2xx within 10 seconds.
+
+Delivery is asynchronous, seconds to hours. Do not use a webhook to drive the
+checkout UI. Poll `Get hosted checkout` on return and treat the webhook as
+later authority.
+
+## Limits, measured on preproduction (Oct 2026)
+
+| Constraint | Behaviour |
+|---|---|
+| `merchantReference` | 30 characters maximum. Longer returns `FIELD_LENGTH_INVALID`. |
+| `merchantCustomerId` | 15 characters maximum. |
+| Return URL | Public HTTPS for a real flow. `https://localhost` and IPs return an HTML 403 from the edge, not JSON. |
+| Create idempotence | None. Same idempotence key, two sessions. |
+| Product filter | One product skips the picker. Unknown id returns 404 `UNKNOWN_PRODUCT_IDS`. Empty filter returns 400 `NO_PAYMENT_PRODUCTS_AVAILABLE`. |
+| Amount | Integer minor units. Zero is accepted at session creation, negative is rejected `AMOUNT_MUST_BE_POSITIVE`. Enforce your own floor. |
+| Session lifetime | 2 hours in the API reference, 3 hours in newer pages. Read the payment id before it expires. |
+| Delete | `DELETE` returns 204; a following `GET` returns 404 `UNKNOWN_HOSTED_CHECKOUT_ID`. |
+
+## Test mode
+
+Verified against Worldline preproduction:
+
+- `4012000033330026` (Visa, CVV 200): frictionless 3DS, then
+  `PENDING_APPROVAL` with `isAuthorized: true`.
+- `4012009341147907` (Visa): an ACS challenge simulator, then `REJECTED`
+  (`statusCode` 180, `isAuthorized: false`). Click Continue Transaction on the
+  simulator to finish.
+- A documented challenge-success card (`4839645466321180`) was rejected as
+  unsupported on the test merchant. Confirm enabled cards with Worldline.
+- `payments.approve` moves `PENDING_APPROVAL` to `CAPTURE_REQUESTED`.
+  `payments.capture` is refused at both states with `NOT_CAPTURABLE_STATUS`.
+
+## Rehearsal
+
+Three scripts in the Attesso repository drive and pin this recipe. They play
+the integrator; Attesso itself never calls executor APIs.
+
+- `scripts/worldline-e2e.mjs`: five phases against preproduction. Commit on an
+  accepted card, cancel on a rejected one, revoke plus void, consumer cancel,
+  and authorization expiry. Every Mandate and Authorization create is replayed
+  under the same idempotency key first; the replay must return the same
+  resource. Commit and cancellation are replayed the same way. It verifies
+  each evidence bundle against the published keys, and self-tests the webhook
+  verifier with the configured key (signed 200, tampered 401).
+- `scripts/worldline-drive.mjs`: runs the harness unattended. It plays the
+  Attesso passkey approval with a virtual authenticator and the hosted card
+  form with Playwright, including the ACS challenge simulator.
+- `scripts/worldline-limits.mjs`: re-checks the field limits and error codes in
+  the table above. Exit 0 means the platform still behaves as documented.
+
+Run them from a directory holding `attesso-quickstart.json` (the quickstart
+state file), with the Worldline credentials in the environment and
+`PUBLIC_BASE_URL` set to a public tunnel that forwards to the state file's
+return port.

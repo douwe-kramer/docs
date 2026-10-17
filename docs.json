@@ -63,7 +63,8 @@
         "pages": [
           "integrations/stripe",
           "integrations/airwallex",
-          "integrations/mollie"
+          "integrations/mollie",
+          "integrations/worldline"
         ]
       },
       {
