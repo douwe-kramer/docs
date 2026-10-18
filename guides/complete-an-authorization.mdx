@@ -48,7 +48,7 @@ provider, see [bind an authorization to your PSP](./bind-to-your-psp).
 
 ## Cancel only when execution is impossible
 
-Disable every external card, token, job, or provider capability before calling the cancellation endpoint.
+Disable every external card, token, job, or provider capability before calling the cancellation endpoint. Cancelling does not refund a recurring period's consumed budget: `current_period.consumed_amount` keeps counting the cancelled reservation.
 
 ```json
 {
