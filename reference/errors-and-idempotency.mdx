@@ -48,7 +48,9 @@ An authorization is a durable record, not an HTTP error. A refusal is `201` with
 | `TERMS_CHANGED` | `DENY` | The approved terms no longer match |
 | `REQUIRED_ATTRIBUTE_MISSING`, `ATTRIBUTE_TYPE_MISMATCH`, `UNSUPPORTED_ATTRIBUTE`, `UNSUPPORTED_POLICY_VERSION` | `INDETERMINATE` | The action could not be evaluated |
 
-`reason.violations[]` carries `path`, `code`, `observed`, and `bound`. Violation codes are `ACTION_MISMATCH`, `VALUE_MISMATCH`, `VALUE_NOT_ALLOWED`, `ABOVE_MAXIMUM`, `OUTSIDE_DATE_RANGE`, `REQUIRED_ATTRIBUTE_MISSING`, and `ATTRIBUTE_TYPE_MISMATCH`. `reason.message` is present when a violation explains the refusal.
+`reason.violations[]` carries `path`, `code`, and, when the failing check has them, `observed` and `bound`. `path` is a JSON Pointer: `/attributes/section`, `/payment/amount`. Policy constraints name the same paths as `attributes.section` and `payment.amount`. Violation codes are `ACTION_MISMATCH`, `VALUE_MISMATCH`, `VALUE_NOT_ALLOWED`, `ABOVE_MAXIMUM`, `OUTSIDE_DATE_RANGE`, `REQUIRED_ATTRIBUTE_MISSING`, and `ATTRIBUTE_TYPE_MISMATCH`.
+
+`violations` is present for `POLICY_MISMATCH` and `INDETERMINATE`. State refusals carry `code` only. `PERIOD_LIMIT_EXCEEDED` carries `code` and `message`.
 
 ## Idempotency keys
 

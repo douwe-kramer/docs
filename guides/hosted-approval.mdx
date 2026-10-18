@@ -60,6 +60,8 @@ The compact JWS must use:
 
 Attesso accepts only the configured issuer and public JWKs. It never fetches a key URL from the token and never receives your private key.
 
+The passkey is bound to the assertion subject. The first approval for a subject registers a passkey; later approvals by that end user assert the registered credential. Keep `subject_reference` stable for a person and distinct between people.
+
 ## TypeScript
 
 Install `jose`, load the key from your secret store, and keep the resulting token in server memory only.

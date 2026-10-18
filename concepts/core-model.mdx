@@ -36,6 +36,7 @@ A recurring Mandate names its cadence with `period_unit` and `period_count`; eac
 
 - `period_unit`: `CALENDAR_MONTH` snaps to the first of the month, `ANCHORED_MONTH` keeps the anchor's day, and `FIXED_DAYS` is a fixed day count.
 - `period_days`: required only for `FIXED_DAYS`.
+- `valid_from` is the anchor for `ANCHORED_MONTH`; there is no separate anchor field in the request. Evidence carries the derived `period_anchor`.
 - `period_count`: the number of periods the term covers.
 - `period_max_amount` and `period_currency`: the most that may be reserved in any one period, in minor units.
 - `valid_until` must be exactly the end of the final period, and the whole term may not exceed 400 days.
@@ -66,6 +67,20 @@ A complete request for three 30-day periods, each capped at EUR 500.00:
   "period_currency": "EUR"
 }
 ```
+
+The create response is the Mandate, starting in `PENDING_APPROVAL`:
+
+```json
+{
+  "id": "mnd_...",
+  "state": "PENDING_APPROVAL",
+  "execution_mode": "RECURRING",
+  "valid_from": "2026-11-01T00:00:00Z",
+  "valid_until": "2027-01-30T00:00:00Z"
+}
+```
+
+The full object, including `policy`, `policy_digest`, and `current_period` once active, is shown under [Period usage](#period-usage).
 
 A `SINGLE_USE` Mandate sends the same body without `execution_mode` and the period fields.
 

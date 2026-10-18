@@ -83,7 +83,18 @@ Content-Type: application/json
 The `opening` must open the `commitment` recorded when the authorization was
 created; otherwise the commit is refused and nothing is recorded.
 
-A successful commit atomically changes the Authorization to `COMMITTED` and its Mandate to `CONSUMED`.
+A successful commit atomically changes the Authorization to `COMMITTED` and its Mandate to `CONSUMED`. The response is the Authorization in its committed state:
+
+```json
+{
+  "id": "aut_...",
+  "state": "COMMITTED",
+  "decision": "ALLOW",
+  "can_execute": false,
+  "external_action_reference": "booking_91823",
+  "committed_at": "2026-10-18T09:12:00Z"
+}
+```
 
 For the full pattern of taking an `ALLOW` and executing it on your own payment
 provider, see [bind an authorization to your PSP](./bind-to-your-psp).
