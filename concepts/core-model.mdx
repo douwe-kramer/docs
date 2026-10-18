@@ -13,7 +13,7 @@ Every Mandate contains an opaque `subject_reference`, one policy, an approval de
 | State | Meaning |
 | --- | --- |
 | `PENDING_APPROVAL` | Created but not approved |
-| `SCHEDULED` | Approved and starts later |
+| `SCHEDULED` | Approved and starts later. Not evaluable; wait for `ACTIVE` before authorizing |
 | `ACTIVE` | Eligible for evaluation |
 | `CONSUMED` | A single-use Mandate whose allowed execution was committed |
 | `REVOKED` | Permanently withdrawn |
@@ -67,6 +67,8 @@ A complete request for three 30-day periods, each capped at EUR 500.00:
 }
 ```
 
+A `SINGLE_USE` Mandate sends the same body without `execution_mode` and the period fields.
+
 Each purchase is checked against the policy cap and the remaining budget of its period. A charge that would push a period past `period_max_amount` is denied with `PERIOD_LIMIT_EXCEEDED`; the next period starts with its own budget when its time arrives.
 
 ### Period usage
@@ -84,6 +86,29 @@ Each purchase is checked against the policy cap and the remaining budget of its 
 
 The field is present only while the Mandate is `ACTIVE` and inside its term. A period nobody has charged in reports zero consumed and the full limit.
 
+A read of an active monthly Mandate after one 120.00 charge is committed:
+
+```json
+{
+  "id": "mnd_...",
+  "state": "ACTIVE",
+  "execution_mode": "RECURRING",
+  "valid_from": "2026-10-01T00:00:00Z",
+  "valid_until": "2026-11-01T00:00:00Z",
+  "current_period": {
+    "index": 0,
+    "starts_at": "2026-10-01T00:00:00Z",
+    "ends_at": "2026-11-01T00:00:00Z",
+    "limit_amount": 50000,
+    "consumed_amount": 12000,
+    "remaining_amount": 38000,
+    "currency": "EUR"
+  }
+}
+```
+
+The response also carries `subject_reference`, `policy`, `policy_digest`, `approval_deadline`, `version`, `created_at`, and `updated_at`.
+
 ## Authorizations
 
 An Authorization is the durable result of evaluating one proposed action. Every structurally valid evaluation creates one, including non-allow results.
@@ -96,9 +121,10 @@ An Authorization is the durable result of evaluating one proposed action. Every 
 
 An `ALLOW` starts in `RESERVED`. It may become `COMMITTED`, `CANCELLED`, or `EXPIRED`. Non-allow decisions use terminal `DENIED` or `INDETERMINATE` states.
 
-## Single-use guarantee
+## One reservation at a time
 
 - A Mandate may evaluate many candidates but can have only one active reservation.
+- A second authorization while one is `RESERVED` is denied with `MANDATE_UNAVAILABLE`; it creates no reservation.
 - Concurrent eligible requests cannot both reserve it.
 - Cancellation or reservation expiry permits a later eligible attempt.
 - Commit permanently consumes a `SINGLE_USE` Mandate; a `RECURRING` Mandate stays `ACTIVE` until its term ends.

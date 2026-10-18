@@ -4,6 +4,48 @@ description: "Gate execution, commit acceptance, cancel safely, and reconcile re
 icon: "git-branch"
 ---
 
+## Create the authorization
+
+```http
+POST /v1/mandates/{mandate_id}/authorizations
+Authorization: Bearer att_test_...
+Idempotency-Key: auth_01J...
+Content-Type: application/json
+```
+
+```json
+{
+  "external_reference": "booking_91823",
+  "proposed_action": {
+    "action": "booking.create",
+    "attributes": { "city": "Amsterdam", "check_in": "2026-11-02" },
+    "payment": { "amount": 39900, "currency": "EUR" }
+  },
+  "execution_window_seconds": 300,
+  "commitment": "sha256:<64 hex characters>"
+}
+```
+
+The commitment is `sha256:` followed by the hex SHA-256 of the domain line `attesso:authorization:commitment:v1` plus a newline, concatenated with 32 random bytes (the opening). Keep the opening server-side and reveal it only at commit. A commitment cannot be reused within an Organization.
+
+The response is the durable record. Gate on its three values, not on the HTTP status:
+
+```json
+{
+  "id": "aut_...",
+  "mandate_id": "mnd_...",
+  "decision": "ALLOW",
+  "state": "RESERVED",
+  "can_execute": true,
+  "reason": { "code": "POLICY_MATCH" },
+  "execute_before": "2026-10-18T09:13:06Z"
+}
+```
+
+A refusal is also `201`, with `decision: "DENY"`, `state: "DENIED"`, and `can_execute: false`. `reason.violations[]` names the path and the policy code. The codes are listed on [Errors and idempotency](/reference/errors-and-idempotency#authorization-decisions).
+
+A Mandate has one reservation in flight. A second authorization while one is `RESERVED` is denied with `MANDATE_UNAVAILABLE` and creates no reservation.
+
 ## Gate execution
 
 Execute only when the latest Authorization has all three values:

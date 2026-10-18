@@ -8,15 +8,15 @@ Your backend signs an identity assertion, creates a five-minute approval session
 
 ## Configure approval trust
 
-Before an approval session can be opened, register your identity provider in the dashboard (per environment: test and live). The API verifies the signed assertion it receives against these three values and refuses anything else.
+Before an approval session can be opened, register your identity provider in the [dashboard](https://www.attesso.com/dashboard) (per environment: test and live). The API verifies the signed assertion it receives against these three values and refuses anything else. On the test plane, the [quickstart script](/quickstart) provisions the same trust on its first run through `PUT /v1/approval-trust`. Live has no provisioning endpoint; use the dashboard.
 
 | Field | What to provide |
 | --- | --- |
 | Identity issuer | An HTTPS URL that exactly matches the `iss` claim on the assertion you sign |
-| Exact return origin | Where the browser returns after the passkey ceremony: a **bare origin** (scheme + host + optional port, **no path, no query**, no fragment) |
+| Exact return origin | Where the browser returns after the passkey ceremony: an **origin** (scheme + host + optional port). The registered value has no path, query, or fragment; the `return_url` you send when creating a session may add a path |
 | ES256 public JWKs | One or two `ES256`/`P-256` public JSON Web Keys (no private `d` value) |
 
-Return to the origin you registered exactly: `https://app.example.com` is allowed, and so is `https://app.example.com/approval-return`. Only the origin (scheme + host + port) is compared, so a path is fine.
+Register the origin only: `https://app.example.com`. The `return_url` you send when creating a session may add a path, for example `https://app.example.com/approval-return`. Attesso compares scheme, host, and port, and returns the browser to the exact URL you sent. The origin must match the registered value exactly: `http://localhost:43117` and `http://127.0.0.1:43117` are different origins. Test keys accept loopback HTTP only with an explicit port.
 
 Generate an ES256/P-256 key pair on your own infrastructure and register only its public key:
 
@@ -206,7 +206,35 @@ func main() {
 
 ## Create and handle the session
 
-Send the assertion with an exact pre-registered return origin and unpredictable `return_state` to `POST /v1/mandates/{mandate_id}/approval-sessions`.
+Send the assertion with a pre-registered return URL and an unpredictable `return_state`:
+
+```http
+POST /v1/mandates/{mandate_id}/approval-sessions
+Authorization: Bearer att_test_...
+Idempotency-Key: approval_01J...
+Content-Type: application/json
+```
+
+```json
+{
+  "identity_assertion": "<compact JWS>",
+  "return_url": "https://app.example.com/approval-return",
+  "return_state": "st_9f2c1b7e4a6d"
+}
+```
+
+`return_state` is required: 16 to 256 characters from `A-Z a-z 0-9 . _ ~ -`. Attesso returns it unchanged in the fragment. A new session invalidates any previous open session for the same Mandate.
+
+```json
+{
+  "id": "aps_...",
+  "mandate_id": "mnd_...",
+  "state": "OPEN",
+  "approval_url": "https://approve.attesso.com/...",
+  "expires_at": "2026-10-18T09:15:00Z",
+  "created_at": "2026-10-18T09:10:00Z"
+}
+```
 
 <Warning>
   `approval_url` is a five-minute, single-use bearer URL. Redirect to it without analytics, logging, browser storage, or email.

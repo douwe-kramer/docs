@@ -32,9 +32,27 @@ Branch on `code` and `retryable`. The API does not send field-level pointers; `d
 | `429` | Rate limited | Back off; a body is not guaranteed |
 | `503` | Retryable infrastructure failure | Fail closed and retry safely |
 
+## Authorization decisions
+
+An authorization is a durable record, not an HTTP error. A refusal is `201` with `decision: "DENY"`, `state: "DENIED"`, and `can_execute: false`. Never execute on `DENY` or `INDETERMINATE`.
+
+| `reason.code` | Decision | Meaning |
+| --- | --- | --- |
+| `POLICY_MATCH` | `ALLOW` | Every constraint matched; one reservation was created |
+| `POLICY_MISMATCH` | `DENY` | A present value failed a constraint; `violations` names the path and code |
+| `PERIOD_LIMIT_EXCEEDED` | `DENY` | The recurring period budget would be exceeded |
+| `MANDATE_NOT_ACTIVE` | `DENY` | The Mandate is not `ACTIVE`, for example `SCHEDULED` |
+| `MANDATE_UNAVAILABLE` | `DENY` | Another reservation is in flight, or the Mandate cannot evaluate |
+| `MANDATE_TERMINAL` | `DENY` | The Mandate is `CONSUMED`, `REVOKED`, or `EXPIRED` |
+| `OUTSIDE_VALIDITY_WINDOW` | `DENY` | The proposed execution is outside the Mandate window |
+| `TERMS_CHANGED` | `DENY` | The approved terms no longer match |
+| `REQUIRED_ATTRIBUTE_MISSING`, `ATTRIBUTE_TYPE_MISMATCH`, `UNSUPPORTED_ATTRIBUTE`, `UNSUPPORTED_POLICY_VERSION` | `INDETERMINATE` | The action could not be evaluated |
+
+`reason.violations[]` carries `path`, `code`, `observed`, and `bound`. Violation codes are `ACTION_MISMATCH`, `VALUE_MISMATCH`, `VALUE_NOT_ALLOWED`, `ABOVE_MAXIMUM`, `OUTSIDE_DATE_RANGE`, `REQUIRED_ATTRIBUTE_MISSING`, and `ATTRIBUTE_TYPE_MISMATCH`. `reason.message` is present when a violation explains the refusal.
+
 ## Idempotency keys
 
-Every write except external reports requires `Idempotency-Key`; a report replays by its `external_reference`. Keys contain 16–255 letters, digits, periods, underscores, colons, or hyphens.
+Every write except external reports requires `Idempotency-Key`; a report replays by its `external_reference`. Keys contain 16 to 255 letters, digits, periods, underscores, colons, or hyphens.
 
 - Persist one key before sending each logical operation.
 - Retry that operation with the same key and identical logical input.
