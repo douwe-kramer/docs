@@ -42,7 +42,7 @@ workspace's test approval trust. Later runs are zero-config.
    keep); continue only when `can_execute` is exactly `true`.
 4. `PUT /v1/authorizations/{id}/commit`: after your executor accepts the
    action, revealing the `opening`; the Authorization becomes `COMMITTED` and
-   the Mandate `CONSUMED`.
+   a single-use Mandate becomes `CONSUMED`.
 5. `GET /v1/mandates/{id}/evidence`: fetch the signed bundle and verify it
    ([Verify evidence](/guides/verify-evidence)).
 

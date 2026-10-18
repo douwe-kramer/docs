@@ -83,7 +83,7 @@ Content-Type: application/json
 The `opening` must open the `commitment` recorded when the authorization was
 created; otherwise the commit is refused and nothing is recorded.
 
-A successful commit atomically changes the Authorization to `COMMITTED` and its Mandate to `CONSUMED`. The response is the Authorization in its committed state:
+A successful commit atomically changes the Authorization to `COMMITTED`. A `SINGLE_USE` Mandate becomes `CONSUMED`; a `RECURRING` Mandate stays `ACTIVE`. The response is the Authorization in its committed state:
 
 ```json
 {
