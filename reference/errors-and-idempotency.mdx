@@ -71,7 +71,7 @@ GET /v1/mandates?external_reference=booking-91823&limit=20
 Authorization: Bearer att_test_...
 ```
 
-The match is exact, newest first. `limit` is 1 to 100 (default 20). `has_more` is true when more Mandates carry the same reference; raise `limit` to read them. The result is scoped to the calling Organization. There is no unfiltered list and no cursor. If more than 100 Mandates share the reference, only the newest 100 are returned.
+The match is exact, newest first. `limit` is 1 to 100 (default 20). `has_more` is true when more Mandates carry the same reference; raise `limit` to read them. The result is scoped to the calling Organization. There is no unfiltered list and no cursor. If more than 100 Mandates share the reference, only the newest 100 are returned. Unknown query parameters are refused with `422`.
 
 ## Retry pattern
 
