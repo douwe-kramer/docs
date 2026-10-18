@@ -69,6 +69,21 @@ A complete request for three 30-day periods, each capped at EUR 500.00:
 
 Each purchase is checked against the policy cap and the remaining budget of its period. A charge that would push a period past `period_max_amount` is denied with `PERIOD_LIMIT_EXCEEDED`; the next period starts with its own budget when its time arrives.
 
+### Period usage
+
+`GET /v1/mandates/{id}` reports `current_period` for an `ACTIVE` recurring Mandate:
+
+| Field | Meaning |
+| --- | --- |
+| `index` | The zero-based period the current time falls in |
+| `starts_at`, `ends_at` | The period's window |
+| `limit_amount` | The period budget, in minor units |
+| `consumed_amount` | Authority consumed at reservation. Nothing releases it: a reservation counts even if it is later cancelled, expires, or never commits |
+| `remaining_amount` | `limit_amount` minus `consumed_amount` |
+| `currency` | The period currency |
+
+The field is present only while the Mandate is `ACTIVE` and inside its term. A period nobody has charged in reports zero consumed and the full limit.
+
 ## Authorizations
 
 An Authorization is the durable result of evaluating one proposed action. Every structurally valid evaluation creates one, including non-allow results.
