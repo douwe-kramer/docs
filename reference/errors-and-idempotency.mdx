@@ -62,6 +62,17 @@ Every write except external reports requires `Idempotency-Key`; a report replays
 - Reusing a key with different input returns `409`.
 - A successful replay returns the same resource identity in its current state.
 
+## Recover a lost create response
+
+If a create response was lost, find the Mandate by its `external_reference`:
+
+```http
+GET /v1/mandates?external_reference=booking-91823&limit=20
+Authorization: Bearer att_test_...
+```
+
+The match is exact, newest first. `limit` is 1 to 100 (default 20). `has_more` is true when more Mandates carry the same reference; raise `limit` to read them. The result is scoped to the calling Organization. There is no unfiltered list and no cursor.
+
 ## Retry pattern
 
 1. Treat every timeout or unavailable response as non-permission.
