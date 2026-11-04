@@ -59,7 +59,7 @@ task                                actions  refused    top              tokens 
 hermes-local-9552aa28437e88c0610a…  2058     455 (22%)  PATH_DENIED×455  3,922,488  645,785,088  3.1932
 ```
 
-Actions are proposals; refusals carry the reason; tokens are input plus output, with cache reads shown separately because they bill at a different rate and usually dwarf the rest. Cost and token counts come from what the caller reported in `--meta` or from an `llm.session` entry the recorder writes from the agent's own usage record. The report never invents a number.
+Actions are proposals; refusals carry the reason; tokens are input plus output, with cache reads shown separately because they bill at a different rate and usually dwarf the rest. Cost and token counts come from what the caller reported in `--meta` or from an `llm.session` entry written by `attesso usage` (or another recorder) from the agent's own usage record. The report never invents a number.
 
 ## Watch and steer
 

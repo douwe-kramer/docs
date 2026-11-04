@@ -30,20 +30,57 @@ npx attesso sync --watch
 
 | Flag | Meaning |
 |---|---|
-| `--limit N` | decisions per batch, 1 to 100; default 50 |
+| `--limit N` | rows per batch (decisions plus usage), 1 to 100; default 50 |
 | `--dry-run` | count what is ready, send nothing, move no cursor |
 | `--watch` | repeat the next batch every five seconds until `Ctrl-C`; `--interval MS` changes the period |
-| `--json` | the server's `accepted`, `skipped`, `metered`, `last_seq` result |
+| `--json` | the server's `accepted`, `skipped`, `metered`, `usage`, `last_seq` result |
 
-Each batch carries at most `limit` entries and only these fields per decision: `seq`, `occurred_at`, `action`, `subject`, `capability`, `decision`, `code`, `task`, `entry_hash`. Arguments, `meta` and amount stay on the machine. The device id is the ledger's key id; change the key and the cursor starts again rather than claiming someone else's history.
+Each batch carries at most `limit` rows. A decision carries only `seq`, `occurred_at`, `action`, `subject`, `capability`, `decision`, `code`, `task` and `entry_hash`; a usage row carries `seq`, `occurred_at`, `task`, `model`, `input_tokens`, `output_tokens`, `cached_tokens` and `cost_usd`. Arguments, prompts, `meta` and amount stay on the machine. The device id is the ledger's key id; change the key and the cursor starts again rather than claiming someone else's history. Usage rows are mirrored but not metered.
 
-The cursor lives in `.attesso/sync.json` and advances to the last sent seq only after the server answers with valid integers. A failed request leaves it alone, so the next run retries the same batch; the server deduplicates by device and sequence, which makes a retry safe. `accepted`, `skipped` and `metered` are what the workspace counted; `metered` is what it booked as billable.
+The cursor lives in `.attesso/sync.json` and advances to the last sent seq only after the server answers with valid integers. A failed request leaves it alone, so the next run retries the same batch; the server deduplicates by device and sequence, which makes a retry safe. `accepted`, `skipped` and `metered` are what the workspace counted; `metered` is what it booked as billable, and `usage` is how many usage rows it stored.
 
-## The hosted view
+## The hosted views
 
 Once a workspace has synced a decision, the dashboard's Bounds entry opens the hosted overview at `/dashboard/<env>/bounds/hosted` directly. `/dashboard/<env>/bounds?setup=1` keeps the local setup instructions for a workspace that has not synced yet.
 
-The overview shows the synced decisions and a review queue of refusals. Closing an item records a resolution or an ignore on the control plane; it never changes the local verdict, the policy, the rules or the signed ledger. The record of what happened stays what it was.
+The overview shows the lifetime decision and refusal counts, device sync health, the refusal reasons and tool activity for the last 24 hours, the three newest open refusals, the five newest decisions, and the token card described below.
+
+### Review queue
+
+`/dashboard/<env>/bounds/reviews` lists every refusal, newest first, with filters for status (`open`, `resolved`, `ignored`, `all`), code and device. Closing an item records a resolution or an ignore on the control plane; it never changes the local verdict, the policy, the rules or the signed ledger. The overview previews the three newest open items and links here with the full count.
+
+### Decisions
+
+`/dashboard/<env>/bounds/decisions` lists every mirrored decision, newest first, with filters for decision (`all`, `ALLOW`, `DENY`), code, device and window (24 hours, 7 days, 30 days, all time). The refusal-reason links on the overview open this page filtered to that code. Use the decision filter to see only refused calls, and the window filter to bound a long history.
+
+Both pages use a keyset cursor: **Older** continues exactly where the page ended, and the filters live in the URL, so a filtered view can be shared or reloaded. The overview requests three reviews and five decisions; the full pages request twenty rows per page.
+
+### Token usage and the estimate
+
+Usage is reported by the agent, never inferred from decisions. `attesso usage` records one measured model request against a task (for a hook, the session id):
+
+```sh
+npx attesso usage --task SESSION --input 12000 --output 800 --cached 64000 \
+  --cost 0.0042 --model MODEL
+```
+
+A harness hook can call it on every model response. Hermes delivers the usage under `extra`, so a one-line hook script records it without blocking the request:
+
+```sh
+#!/bin/sh
+npx attesso --dir ~/.hermes/attesso-veto/ledger4 usage --stdin --json >/dev/null 2>&1 || true
+```
+
+```yaml
+hooks:
+  post_api_request:
+    - command: /Users/you/.hermes/attesso-veto/usage-hook.sh
+      timeout: 10
+```
+
+The overview shows the measured 24-hour total (input, output, sessions, reported cost). Once a task has both calls and usage, it also shows a refused-token estimate: the measured tokens divided by the measured calls in that task, applied to every refused call in the window. The card prints the measured-call count and the coverage (measured calls divided by all calls) beside the number.
+
+Refused calls are exact. The token figure is an estimate, and a refused call can add a model turn, so it is impact, not a savings or billing claim. With no reported usage the card says **not measured** rather than showing a fabricated number.
 
 ## Publish a rule set
 
@@ -68,7 +105,8 @@ Local verification proves the bundle came from Attesso's signing key and was not
 | Adds | Does not add |
 |---|---|
 | a mirror of decisions the workspace can read from anywhere | new decision logic: the local engine judges the same way |
-| a review queue over refusals | any change to the local verdict when an item is closed |
+| a review queue over refusals, with filters and a full page | any change to the local verdict when an item is closed |
+| a measured token usage mirror and a labelled refused-token estimate with coverage | a measured savings claim: refused calls are exact, the token figure is an estimate |
 | a signed, versioned rule bundle | path scope, shell scope or tool pins, which stay local |
 | passkey approval and evidence a third party verifies offline | authority for a local-only ledger, which keeps proving integrity |
 

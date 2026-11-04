@@ -59,7 +59,8 @@ icon: "terminal"
 
 | Command | What it does |
 |---|---|
-| `attesso sync [--url URL] [--key KEY] [--limit N] [--json] [--dry-run] [--watch] [--interval MS]` | send the next decisions to the hosted mirror; `--limit` 1 to 100, default 50; `--watch` repeats every 5 seconds |
+| `attesso sync [--url URL] [--key KEY] [--limit N] [--json] [--dry-run] [--watch] [--interval MS]` | send the next decisions and usage rows to the hosted mirror; `--limit` 1 to 100 rows, default 50; `--watch` repeats every 5 seconds |
+| `attesso usage [--stdin] [--task T] [--input N] [--output N] [--cached N] [--cost USD] [--model M] [--json]` | record one measured model request; `--stdin` reads a harness hook payload (`extra.usage`) |
 | `attesso policy pull [--url URL] [--key KEY] [--apply] [--json]` | verify the hosted rule bundle, and write `rules.json` with `--apply` |
 
 ## Tools
