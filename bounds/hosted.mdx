@@ -55,7 +55,7 @@ The overview shows the lifetime decision and refusal counts, device sync health,
 
 Both pages use a keyset cursor: **Older** continues exactly where the page ended, and the filters live in the URL, so a filtered view can be shared or reloaded. The overview requests three reviews and five decisions; the full pages request twenty rows per page.
 
-### Token usage and the estimate
+### Token usage and the 24-hour summary
 
 Usage is reported by the agent, never inferred from decisions. `attesso usage` records one measured model request against a task (for a hook, the session id):
 
@@ -78,9 +78,9 @@ hooks:
       timeout: 10
 ```
 
-The overview shows the measured 24-hour total (input, output, sessions, reported cost). Once a task has both calls and usage, it also shows a refused-token estimate: the measured tokens divided by the measured calls in that task, applied to every refused call in the window. The card prints the measured-call count and the coverage (measured calls divided by all calls) beside the number.
+The 24-hour card leads with what needs a decision: refused calls, decisions, measured coverage and open reviews, all exact. The measured token total (input, output, sessions, reported cost) is one line below it.
 
-Refused calls are exact. The token figure is an estimate, and a refused call can add a model turn, so it is impact, not a savings or billing claim. With no reported usage the card says **not measured** rather than showing a fabricated number.
+No figure is inferred from decisions. With no reported usage the card says **no token usage reported** rather than showing a fabricated number.
 
 ## Publish a rule set
 
@@ -106,7 +106,7 @@ Local verification proves the bundle came from Attesso's signing key and was not
 |---|---|
 | a mirror of decisions the workspace can read from anywhere | new decision logic: the local engine judges the same way |
 | a review queue over refusals, with filters and a full page | any change to the local verdict when an item is closed |
-| a measured token usage mirror and a labelled refused-token estimate with coverage | a measured savings claim: refused calls are exact, the token figure is an estimate |
+| a measured token usage mirror with a 24-hour decision summary | a savings or cost claim: refusals and decisions are exact, tokens are measured only |
 | a signed, versioned rule bundle | path scope, shell scope or tool pins, which stay local |
 | passkey approval and evidence a third party verifies offline | authority for a local-only ledger, which keeps proving integrity |
 
