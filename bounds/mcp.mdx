@@ -1,0 +1,87 @@
+---
+title: "MCP servers"
+description: "Pin the tool surface you reviewed, run a stdio MCP server behind the gate, and control the local ledger over MCP without granting enforcement."
+icon: "server"
+---
+
+An MCP server is a tool surface that can change between calls. A tool name is not enough to decide: the same name can come back with a different description, a different schema, or a different server altogether. `tools pin` records the definitions you reviewed, and the bundled adapter enforces them.
+
+## Pin a tool manifest
+
+```sh
+npx attesso tools pin --manifest tools.manifest.json
+npx attesso tools verify --manifest tools.manifest.json
+```
+
+The manifest is the harness's own list:
+
+```json
+{ "tools": [
+  { "name": "read_file", "description": "…", "inputSchema": {}, "outputSchema": {}, "annotations": {} }
+] }
+```
+
+`pin` hashes each tool's full definition and the current `.attesso/tools.json`, writes both the snapshot and a lock, and prints the tools digest plus whichever extra surfaces it found (`server`, `prompts`, `resources`, `resource_templates`). `verify` compares the lock with the manifest and names what changed: a changed tool, an added one, a removed one, a changed surface.
+
+A caller that knows the definition can send `tool_definition_hash` with the call:
+
+| What the caller sends | Recorded as |
+|---|---|
+| a hash matching the pin | `tool_pin: verified` |
+| a hash that does not match | refused, code `TOOL_CHANGED` |
+| no hash | `tool_pin: unverified`, allowed if the policy allows it |
+
+A pin is only as good as what it covers. If the caller never sends a hash, the pin records definitions but does not refuse a drifted server on its own; the adapter below is what closes that.
+
+## The stdio adapter
+
+```sh
+# 1. Ask the server for its identity, instructions, tools, prompts and resources.
+npx attesso-mcp --print-manifest -- npx -y @modelcontextprotocol/server-everything > mcp.manifest.json
+
+# 2. Review it, then pin the whole surface.
+npx attesso tools pin --manifest mcp.manifest.json
+
+# 3. Put the adapter in front of the same server.
+npx attesso-mcp --dir .attesso -- npx -y @modelcontextprotocol/server-everything
+```
+
+The adapter speaks both eras: the `2026-07-28` stateless discovery shape and the older `initialize` handshake. `--era auto` (the default) discovers, `--era modern` and `--era legacy` force one; `--era legacy` is what you need when a dual-era server would otherwise be discovered as modern.
+
+It refuses, before the client sees the answer:
+
+- a changed server identity, instructions, tool, prompt, resource or resource template;
+- a changed or unpinned tool, before the call reaches the server;
+- a server-initiated sampling, elicitation or roots request.
+
+Every allowed call is recorded in the signed ledger, and `export` carries the pinned manifest and the tool lock, so `verify-bundle` can check the evidence in an empty directory.
+
+<Warning>
+The adapter is stdio only. Remote HTTP MCP servers and generic gateway features are out of scope: this is not an MCP gateway, a sandbox or a secret scanner.
+</Warning>
+
+## Control the ledger over MCP
+
+`attesso-control-mcp` is a second, smaller server: it lets an agent inspect and narrow the local configuration without granting it the ability to widen it.
+
+```sh
+npx attesso-control-mcp --dir .attesso
+```
+
+It speaks stdio and answers both protocol eras. Tools:
+
+| Tool | What it can do |
+|---|---|
+| `bounds_status` | the same summary as `attesso status` |
+| `bounds_connect` | connect in `observe` or `off` |
+| `bounds_mode` | set the mode to `observe` or `off` |
+| `bounds_paths_get` | read the current path scope |
+| `bounds_paths_set` | narrow roots and exclusions |
+
+Three things it cannot do, by design: enable enforcement (`enforce` is a human CLI action), widen a root or exclusion, and reach the network. It has no HTTP listener. `shell_scope` is a human CLI setting, written with `attesso paths --set`.
+
+`attesso-mcp` remains the upstream tool proxy; `attesso-control-mcp` is the control surface.
+
+## Where the pin fits the decision
+
+The tool verdict is checked before path scope, policy and path rules (see [Path rules](/bounds/rules)). That order is deliberate: a tool whose definition changed should be refused as a changed tool, not as a policy mismatch.

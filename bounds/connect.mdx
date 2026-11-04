@@ -1,0 +1,96 @@
+---
+title: "Connect an agent"
+description: "Wire the decision into Hermes, Claude Code, Codex, Cursor, Cline or Gemini, start in observe, then enforce."
+icon: "plug"
+---
+
+`attesso hook` reads one tool call on stdin and writes the harness's own refusal shape on stdout. The connector does the plumbing: it initializes the ledger if needed, writes the mode file, wires every harness it detects and prints a machine-readable result.
+
+```sh
+npx attesso connect --write --mode observe --json
+npx attesso status --json
+```
+
+Without `--write` the command is a dry run: it reports what it would wire and changes nothing.
+
+## Command surface
+
+| Command | What it does |
+|---|---|
+| `attesso connect [--write] [--mode observe\|enforce\|off] [--harness KEY] [--json]` | init, mode, hook and agent block in one call. Default mode is `observe`; `--observe`, `--enforce` and `--off` are shorthands |
+| `attesso status [--json]` | `initialized`, `mode`, `ledger`, `harnesses`, `wired`, `manual`, `connected`, and a `next` list |
+| `attesso mode [observe\|enforce\|off] [--json]` | read the active mode, or set it for every wired harness |
+| `attesso setup [--write] [--enforce] [--dry-run]` | detect harnesses, preview or install the hook, and write the agent block |
+| `attesso serve [--observe]` | long-lived decision loop: one JSON request per line in, one verdict per line out |
+
+`connect --write` installs a hook that reads `.attesso/mode` at call time, so `attesso mode enforce` takes effect on the next call without editing any harness config. `setup --write` writes the flag into the hook itself (`hook --observe`, or plain `hook` with `--enforce`), which is what you want when the config is managed by hand.
+
+## Harnesses
+
+| Caller | Event | Refusal |
+|---|---|---|
+| Hermes | `pre_tool_call` | exit 2 with a message |
+| Claude Code, Codex | `PreToolUse` | `hookSpecificOutput.permissionDecision: deny` |
+| Cursor | `preToolUse` | `permission: deny` with both messages |
+| Cline | nested `preToolUse` | `{ cancel: true, errorMessage }` |
+| Gemini | `BeforeTool` | `{ decision: deny, reason }` |
+
+Automatic installers exist for `hermes`, `claude-code`, `codex`, `gemini` and `cline`. Cursor and project-local Claude or Cursor configs are detected without an installer: the hook already speaks their payload, but this release does not edit their config files, so they are reported as manual and wired by hand.
+
+The Hermes entry looks like this:
+
+```yaml
+hooks:
+  pre_tool_call:
+    - command: npx attesso --dir ~/.attesso hook
+      timeout: 10
+```
+
+Codex needs one manual step: run `/hooks` in Codex, review the installed command and trust it. A changed hook definition is untrusted again. The other harnesses load the written config on their next start.
+
+## What the agent is told
+
+`connect --write` and `setup` write a marked block into `AGENTS.md` in the working directory:
+
+```md
+<!-- attesso:start -->
+Bounds evaluates your tool calls locally and records every decision. In observe mode
+a refusal is recorded but not blocked; in enforce mode it blocks. When a call is
+refused you get a tool error naming the rule and the step that tainted the task.
+Do not retry a refused call unchanged: read `attesso explain <seq>`, take another
+path, or ask the user whether the rule is wrong. To see rules the ledger supports,
+run `attesso suggest`.
+<!-- attesso:end -->
+```
+
+The block is replaced in place on the next run, so it never duplicates. The point is that a refused agent has an instruction: read the reason, change the path, or ask, rather than retrying the same call.
+
+<Note>
+In observe mode, and on an `ALLOW`, a native harness gets no decision from Bounds, so its own approval prompt still runs. Enforcement only ever adds a refusal.
+</Note>
+
+## Observe, then enforce
+
+Start with `observe`. Every verdict is recorded and nothing is blocked, which is how you learn your own refusal rate before a refusal costs you a day.
+
+```sh
+npx attesso connect --write --mode observe
+npx attesso report
+npx attesso mode enforce
+```
+
+Two things decide when to switch: the refusals you can read in `report` are ones you agree with, and `attesso replay` shows a rule change would not block work you need. [Path rules](/bounds/rules) covers both commands.
+
+## Long-lived harnesses
+
+`attesso serve` answers the same questions over one process instead of one process per call:
+
+```sh
+npx attesso serve
+```
+
+One JSON request per line in, one verdict per line out. Use it where process spawn latency is too high for a per-call hook.
+
+## Generic hook contract
+
+Any harness that can run a command before a tool call can use Bounds without an installer. Run `attesso hook`, write the tool call as JSON on stdin, and treat exit 2 as a refusal with the reason on stderr. `attesso serve` is the same contract over a pipe.

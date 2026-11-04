@@ -1,0 +1,77 @@
+---
+title: "Receipts and packets"
+description: "Hand someone one decision, or a whole task, and let them verify it without your machine, your ledger or your account."
+icon: "badge-check"
+---
+
+A ledger proves history to the person holding it. These commands produce artifacts that travel: a receipt for one entry, a packet around a task, and a checkpoint you keep somewhere the agent cannot write.
+
+| Command | Writes | Verifiable with |
+|---|---|---|
+| `attesso prove <seq> --out receipt.json` | one entry, its path to a Merkle root, a signed head | the public key alone, no ledger |
+| `attesso checkpoint --out head.json` | the signed head of the whole log | a later `verify --pin` |
+| `attesso export <seq> --out bundle.json` | entry, receipt, exact policy and rules bytes | `verify-bundle [--key]`, `--replay` re-runs the verdict |
+| `attesso packet <seq> --out packet.json` | a named envelope around one bundle | `verify-packet [--key]`, `--replay` in an empty directory |
+
+```sh
+npx attesso prove 2 --out receipt.json
+npx attesso verify-receipt receipt.json
+
+npx attesso checkpoint --out head.json
+npx attesso verify --pin head.json
+
+npx attesso export 2 --out bundle.json
+npx attesso verify-bundle bundle.json --replay
+
+npx attesso packet 2 --title "refund review" --out packet.json
+npx attesso verify-packet packet.json --replay
+```
+
+None of the three verifiers needs a ledger, a config or a network call: the point is that the other person can run them in an empty directory. Each artifact carries the public key that signed it, so a verifier with no key still runs.
+
+Pass `--key PATH` to check against a key you obtained another way. That is the difference between "this file is internally consistent" and "this was signed by the key I expected"; without `--key` the verifier trusts the key inside the artifact, which is exactly what someone who does not trust you should not do.
+
+A receipt is about 1.5 KB at ten thousand entries: the entry, its Merkle path, and the signed head that anchors it. A packet adds a title, a digest and a summary of the task, and is the artifact to hand to another person.
+
+## Pins
+
+A receipt proves one entry sits in the tree whose head this key signed. A pin proves the log was not rewritten below a head you kept elsewhere.
+
+```sh
+npx attesso verify --pin head.json
+```
+
+`verify --pin` recomputes the prefix root and refuses a log that was rewritten below the pin. The check is against the local log; comparing two heads alone, offline, waits for a consistency proof this release does not ship. Store `head.json` on another device, or in a repository the agent cannot write. A pin beside the ledger is not independent.
+
+## What each artifact proves
+
+| Artifact | It proves | It does not prove |
+|---|---|---|
+| `verify` | this exact file is the chain the head signed | that anything was authorised |
+| receipt | this entry is in the tree a named key signed | human approval, or that the rest of the task happened |
+| pin | the log was not rewritten below that head | that the pin is honest, if you took it from the same machine |
+| bundle | the verdict re-runs from the exact policy and rules bytes | that the recorded history is complete |
+| packet | the envelope and digest match, and the verdict replays | that a person agreed with the decision |
+| hosted evidence | a passkey assertion over exact terms, verified against published keys | that an executor did what it claimed |
+
+## Signing methods
+
+A record names which signer it carries, and the verifier refuses a combination it does not recognise.
+
+| Method | What it proves | Where it fits |
+|---|---|---|
+| Passkey (WebAuthn, ES256) | a human was present and signed these exact terms | hosted approval, key changes, high-value actions |
+| Local Ed25519 key | the ledger was not edited, and one entry proves offline | developer mode, observe, CI linting |
+| SSH or Git signature | possession of a known developer identity | rule changes, CI-produced receipts |
+| Cloud KMS or HSM | the service that signed is the one we operate | hosted envelopes and evidence packs |
+| HMAC or shared secret | nothing to a third party | rejected: the verifier would hold the signing key |
+
+A record that claims human authority must carry a WebAuthn assertion. A local or CI key is not interchangeable with one, even when both verify.
+
+## The limit, stated plainly
+
+The signing key lives in `.attesso/key.json`, in the same directory as the log. Anything that can write the log can write a new one and sign it. A receipt proves the entry is in the log whose head this key signed; it does not prove a human approved it.
+
+It cannot see absence either: a process that deletes the whole directory leaves nothing to verify. If that matters for the decision in front of you, the record has to live where you do not control it.
+
+Hosted Attesso is where authority lives: a passkey approval binds a named human to exact terms, the decision and the refusal are recorded server-side, and the result is evidence a third party verifies offline against a published key. The local ledger uses the same event and code vocabulary, so it can be submitted there later. That chain is described under [verify evidence](/guides/verify-evidence) and [core model](/concepts/core-model).

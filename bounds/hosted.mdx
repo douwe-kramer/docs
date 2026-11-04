@@ -1,0 +1,75 @@
+---
+title: "Hosted sync and policy"
+description: "Mirror decisions to the workspace, publish a signed rule set, and know exactly what leaves the machine."
+icon: "cloud"
+---
+
+The local ledger stays the source of truth. Hosted sync mirrors the next decisions to the workspace so the record can be followed from any machine, and hosted policy lets an administrator publish one rule set that every connected machine verifies before adopting.
+
+Both need an API key that belongs to an entitled live workspace. The free local tier needs no connection.
+
+## Configure the workspace
+
+```sh
+export ATTESSO_SYNC_URL=https://api.attesso.com
+export ATTESSO_API_KEY=att_live_...
+```
+
+Resolution order: explicit `--url` and `--key`, then `ATTESSO_SYNC_URL` and `ATTESSO_API_KEY`, then `~/.config/attesso/config.json` (mode 0600). The local UI writes that file through **Connect workspace**; `sync` and `policy pull` read it. The key is never printed back.
+
+The URL must be `https`, except on loopback where `http` is allowed for local testing, and it may not contain credentials. A key must look like an Attesso API key; anything else is rejected before a request is made.
+
+## Sync
+
+```sh
+npx attesso sync
+npx attesso sync --dry-run
+npx attesso sync --limit 100
+npx attesso sync --watch
+```
+
+| Flag | Meaning |
+|---|---|
+| `--limit N` | decisions per batch, 1 to 100; default 50 |
+| `--dry-run` | count what is ready, send nothing, move no cursor |
+| `--watch` | repeat the next batch every five seconds until `Ctrl-C`; `--interval MS` changes the period |
+| `--json` | the server's `accepted`, `skipped`, `metered`, `last_seq` result |
+
+Each batch carries at most `limit` entries and only these fields per decision: `seq`, `occurred_at`, `action`, `subject`, `capability`, `decision`, `code`, `task`, `entry_hash`. Arguments, `meta` and amount stay on the machine. The device id is the ledger's key id; change the key and the cursor starts again rather than claiming someone else's history.
+
+The cursor lives in `.attesso/sync.json` and advances to the last sent seq only after the server answers with valid integers. A failed request leaves it alone, so the next run retries the same batch; the server deduplicates by device and sequence, which makes a retry safe. `accepted`, `skipped` and `metered` are what the workspace counted; `metered` is what it booked as billable.
+
+## The hosted view
+
+Once a workspace has synced a decision, the dashboard's Bounds entry opens the hosted overview at `/dashboard/<env>/bounds/hosted` directly. `/dashboard/<env>/bounds?setup=1` keeps the local setup instructions for a workspace that has not synced yet.
+
+The overview shows the synced decisions and a review queue of refusals. Closing an item records a resolution or an ignore on the control plane; it never changes the local verdict, the policy, the rules or the signed ledger. The record of what happened stays what it was.
+
+## Publish a rule set
+
+A workspace administrator authors the rule set at `/dashboard/<env>/bounds/policy`. Publishing creates an immutable version signed with Attesso's evidence key. The local engine fetches it, verifies the envelope against `/.well-known/jwks.json`, and only then replaces `.attesso/rules.json`:
+
+```sh
+npx attesso policy pull
+npx attesso policy pull --apply
+npx attesso policy pull --url https://api.attesso.com --json
+```
+
+Without `--apply` the command verifies and previews the version and digest; with it, `rules.json` is written (or reported as already current). A tampered signature, an unknown key, an unexpected format or an invalid rule set writes nothing. A workspace with no published policy answers 404 and the command says so.
+
+The bundle is `attesso.bounds.policy.v1`. Path scope and `shell_scope` are not in it: those stay on the machine that enforces them, set with `attesso paths --set`.
+
+<Note>
+Local verification proves the bundle came from Attesso's signing key and was not edited in transit. Who inside the workspace published it, and whether they had the right to, is a control-plane question the local engine does not check; treat publishing rights as the authority.
+</Note>
+
+## What hosted adds, and what it does not
+
+| Adds | Does not add |
+|---|---|
+| a mirror of decisions the workspace can read from anywhere | new decision logic: the local engine judges the same way |
+| a review queue over refusals | any change to the local verdict when an item is closed |
+| a signed, versioned rule bundle | path scope, shell scope or tool pins, which stay local |
+| passkey approval and evidence a third party verifies offline | authority for a local-only ledger, which keeps proving integrity |
+
+The split is the same one [Receipts and packets](/bounds/evidence) sets out: local proves the file was not edited, hosted proves a named human approved exact terms and lets someone who does not trust you check it.

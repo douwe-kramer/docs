@@ -34,6 +34,21 @@
         ]
       },
       {
+        "group": "Bounds",
+        "icon": "shield-half",
+        "pages": [
+          "bounds/overview",
+          "bounds/connect",
+          "bounds/rules",
+          "bounds/paths",
+          "bounds/ledger",
+          "bounds/evidence",
+          "bounds/mcp",
+          "bounds/hosted",
+          "bounds/reference"
+        ]
+      },
+      {
         "group": "Core model",
         "icon": "shapes",
         "pages": [
@@ -135,6 +150,10 @@
     "drilldown": true
   },
   "redirects": [
+    {
+      "source": "/bounds",
+      "destination": "/bounds/overview"
+    },
     {
       "source": "/getting-started/how-attesso-works",
       "destination": "/"

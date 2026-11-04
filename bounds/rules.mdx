@@ -1,0 +1,158 @@
+---
+title: "Path rules"
+description: "Refuse a call because of the task's history: the rule schema, the evaluation order, and how to test a change before it blocks work."
+icon: "route"
+---
+
+A single step can look fine while the sequence is wrong. Reading an untrusted page and then sending an email is an exfiltration that no per-step check can see. Bounds judges a proposed call against the path of its task, using three fields the caller sets on every proposal:
+
+| Field | Values | Meaning |
+|---|---|---|
+| `--task` | any id | scopes the history, so one job cannot taint another |
+| `--trust` | `internal`, `untrusted`, `unknown` | where the content came from |
+| `--capability` | `read`, `write`, `send`, `execute`, `spend` | what the step does |
+
+```sh
+npx attesso log --action web.read  --subject docs.example        --task job-1 --trust untrusted --capability read
+npx attesso log --action mail.send --subject partner@example.com --task job-1 --capability send
+# #2 DENY mail.send partner@example.com (PATH_DENIED by step #1 under no-send-after-untrusted-read)
+
+npx attesso log --action file.read --subject src/app.ts          --task job-2 --trust internal  --capability read
+npx attesso log --action mail.send --subject partner@example.com --task job-2 --capability send
+# #4 ALLOW mail.send partner@example.com (ALLOW)
+```
+
+## The rules file
+
+Rules live in `.attesso/rules.json`, versioned with your code. Every entry records the digest of the rules it was judged under, so a later rule change is visible against old decisions.
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "no-send-after-untrusted-read",
+      "deny": { "capabilities": ["send"] },
+      "if_path": { "trust": "untrusted", "capability": "read", "within_minutes": 30 }
+    }
+  ]
+}
+```
+
+| Field | Requirement |
+|---|---|
+| `version` | exactly `1` |
+| `rules[].id` | non-empty, unique by convention, named in the refusal |
+| `deny` | one of `{ "capabilities": [...] }`, `{ "capability": "..." }` or `{ "all": true }`; a rule that denies nothing is rejected |
+| `deny.all` | expands to all five capabilities |
+| `if_path.trust` | `internal`, `untrusted` or `unknown` |
+| `if_path.capability` | one of the five capabilities |
+| `if_path.subject` | exact subject match, e.g. `web_extract` |
+| `if_path.same_arguments` | `true`: require a matching argument fingerprint, not just the same subject |
+| `if_path.within_minutes` | whole minutes, `0` or more, measured back from now |
+| `max_steps` | whole number, at least 1: a ceiling on the task's history |
+| `max_repeats` | whole number, at least 1: a ceiling on identical calls |
+| `if_path` | required unless the rule carries `max_steps` or `max_repeats` |
+
+The file is validated before it is used. An unknown capability, an unknown trust level, a rule with no condition, or a non-integer ceiling is a hard error, not a silently ignored rule.
+
+## Evaluation order
+
+Rules are evaluated in file order and the first match wins, so specific rules belong above broad ones. For each rule:
+
+1. **Capability filter.** A rule only judges a proposal whose capability it denies. A `max_steps` on a `send` rule is checked when a send is proposed, against the whole task history.
+2. **Step ceiling.** `max_steps` compares the task's history length. At or over the ceiling: `DENY`, code `STEP_LIMIT`, `tainted_by` is the step count. This is the rule that ends a runaway loop.
+3. **Repeat ceiling.** `max_repeats` counts earlier entries with the same subject and the same argument fingerprint. At or over the ceiling: `DENY`, code `REPEAT_LIMIT`, `tainted_by` is the first repeated step. Without an argument fingerprint a repeat cannot be identified, so the check is skipped rather than counting every call with the same subject.
+4. **Path match.** The most recent earlier step that matches `trust`, `capability`, `subject` and `same_arguments`, inside `within_minutes`, taints the path. On a match: `DENY`, code `PATH_DENIED`, `tainted_by` names that step.
+
+Naming the step is the difference between a refusal you can act on and a mystery: `#2 DENY mail.send partner@example.com (PATH_DENIED by step #1 under no-send-after-untrusted-read)`.
+
+<Warning>
+Without `within_minutes` a taint lasts for the whole task. A broad rule should always carry a window; that is why both shipped profiles do.
+</Warning>
+
+## Shipped profiles
+
+`init` writes `balanced`. `init --profile strict` writes the conservative variant. An existing ledger can adopt either:
+
+```sh
+npx attesso rules set-profile balanced
+npx attesso rules set-profile strict
+```
+
+The previous file is kept as `rules.json.bak`, and the command prints the new digest.
+
+```json
+{ "version": 1,
+  "rules": [
+    { "id": "no-send-after-untrusted-read",
+      "deny": { "capabilities": ["send"] },
+      "if_path": { "trust": "untrusted", "capability": "read", "within_minutes": 30 } },
+    { "id": "no-repeat-web-extract",
+      "deny": { "capabilities": ["read"] },
+      "if_path": { "capability": "read", "subject": "web_extract",
+                   "same_arguments": true, "within_minutes": 30 } }
+  ] }
+```
+
+`balanced` blocks the outbound boundary and duplicate fetches; it leaves local edits and commands alone. `strict` adds `write` and `execute` to the first rule, for an untrusted environment where a shell command itself can exfiltrate.
+
+## Ceilings for loops
+
+The repeat rule above is narrow on purpose: one subject, same arguments, thirty minutes. A ceiling is the general form and belongs on the task:
+
+```json
+{ "version": 1,
+  "rules": [
+    { "id": "task-step-ceiling", "deny": { "all": true }, "max_steps": 120 },
+    { "id": "no-identical-call-twice", "deny": { "all": true }, "max_repeats": 2 }
+  ] }
+```
+
+`max_steps` counts the task's history, so it stops the afternoon, not one call. `max_repeats` needs the caller to supply an argument fingerprint; a harness that sends `args_hash` gets repeat detection, one that does not is left with `max_steps`.
+
+## Find rules from the ledger
+
+`suggest` counts identical calls in the ledger and prints the rule its own counts justify:
+
+```sh
+npx attesso suggest
+npx attesso suggest --json
+```
+
+`explain` opens one entry in full: the verdict, the rule, the step that tainted the path, and what to do about it.
+
+```sh
+npx attesso explain 42
+```
+
+The advice is specific to the code: `PATH_DENIED` names the step and the rule, `STEP_LIMIT` suggests splitting the task or raising the ceiling, `REPEAT_LIMIT` suggests changing the call, and a policy refusal points at the amount, payee or window instead.
+
+## Test a change before it blocks work
+
+`replay` re-judges the whole ledger against a candidate policy and rules file, using the history that preceded each decision:
+
+```sh
+npx attesso replay --policy next-policy.json --rules next-rules.json
+npx attesso replay --policy next-policy.json --max-newly-denied 0
+```
+
+The summary names how many decisions would flip. `--max-newly-denied N` turns a budget into an exit code, so CI can refuse a rule change that would have blocked real work.
+
+Replay is a diagnostic: it uses the history the ledger holds and cannot prove that history is complete.
+
+## Where the policy ends and the rules begin
+
+- `policy.json` decides one action: action name, subjects, amount, currency, window. Its codes are `ACTION_MISMATCH`, `REQUIRED_ATTRIBUTE_MISSING`, `VALUE_NOT_ALLOWED`, `VALUE_MISMATCH`, `ABOVE_MAXIMUM`, `OUTSIDE_DATE_RANGE`.
+- `rules.json` decides what a task may not do *after* a step, plus the step and repeat ceilings. Its codes are `PATH_DENIED`, `STEP_LIMIT`, `REPEAT_LIMIT`.
+- `paths.json` decides which files a file tool may touch. Its codes are `PATH_SCOPE_DENIED`, `PATH_REQUIRED` and `SHELL_SCOPE_DENIED`. See [Scope file tools](/bounds/paths).
+
+All of these run on every proposal, and the first refusal wins. The order is fixed:
+
+1. **Control.** A paused or stopped task is refused with `TASK_PAUSED` or `TASK_STOPPED`, even in observe mode.
+2. **Tool pin.** A changed or unpinned tool is refused with `TOOL_CHANGED` before any other rule is read. See [MCP servers](/bounds/mcp).
+3. **Path scope.** `paths.json` is checked next: `PATH_SCOPE_DENIED`, `PATH_REQUIRED`, `SHELL_SCOPE_DENIED`. See [Scope file tools](/bounds/paths).
+4. **Policy.** `policy.json` decides the action itself: `ACTION_MISMATCH`, `REQUIRED_ATTRIBUTE_MISSING`, `VALUE_NOT_ALLOWED`, `VALUE_MISMATCH`, `ABOVE_MAXIMUM`, `OUTSIDE_DATE_RANGE`.
+5. **Path rules.** `rules.json` is only consulted when the policy allows: `PATH_DENIED`, `STEP_LIMIT`, `REPEAT_LIMIT`.
+
+The recorded entry carries the code and the rule field of whichever step refused it.

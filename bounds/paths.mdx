@@ -1,0 +1,74 @@
+---
+title: "Scope file tools"
+description: "Give file tools a set of roots and exclusions, and refuse anything outside them. What is enforced, what is not."
+icon: "folder-lock"
+---
+
+A policy can allow a tool and the path it names can still be wrong: `write_file` on `~/.ssh/authorized_keys` is allowed by an action policy that only says "write is permitted". Path scope is a separate check with its own file, its own codes and its own failure mode.
+
+```json
+{
+  "version": 1,
+  "allowed_roots": [
+    { "path": "~/project", "access": ["read", "write"] }
+  ],
+  "exclusions": ["**/.env", "**/.ssh/**"]
+}
+```
+
+Write it through the CLI so it is validated and published atomically:
+
+```sh
+npx attesso paths --set paths.json
+npx attesso paths --json
+```
+
+The local UI writes the same file, so a change from either surface applies to the next call.
+
+## Schema
+
+| Field | Requirement |
+|---|---|
+| `version` | exactly `1` |
+| `allowed_roots` | list, at most 128 entries |
+| `allowed_roots[].path` | non-empty string; may start with `~/`; may not contain `..`; a trailing `/**` is stripped |
+| `allowed_roots[].access` | non-empty list of `read` and `write`, duplicates removed |
+| `exclusions` | list of glob strings, at most 128; non-empty; may not contain `..` |
+| `shell_scope` | `unscoped` (default) or `deny` |
+
+Both lists are required. A missing `exclusions` is invalid, not "no exclusions", because an empty list and a forgotten list should not look the same.
+
+Globs support `**` for any depth (including zero directories), `*` within one path segment, and `?` for one character. Matching is case-insensitive on macOS and Windows.
+
+## What happens to a proposal
+
+The check runs before the policy and before path rules:
+
+1. `shell_scope: "deny"` plus capability `execute` is refused as `SHELL_SCOPE_DENIED`.
+2. A file tool with no resolvable path is refused as `PATH_REQUIRED`. Other tools without a path are not judged here.
+3. The path is resolved: `~` expands to your home, relative paths resolve from the working directory, and symlinks are resolved with `realpath`. A write target that does not exist yet resolves its existing parent, so a symlinked directory cannot be used to escape a root.
+4. An exclusion that matches the resolved path, or the path as written, is refused as `PATH_SCOPE_DENIED` with rule `path-exclusion`. Exclusions win over roots.
+5. For `read` and `write`, the path must sit under a configured root. Outside every root: `PATH_SCOPE_DENIED` with rule `path-root`. Inside a root that does not grant the capability: `PATH_SCOPE_DENIED` with rule `path-access`.
+6. Other capabilities (`send`, `execute`, `spend`) are not path-judged, except by the `shell_scope` check above.
+
+File tools are the known set: `read_file`, `write_file`, `patch`, `apply_patch`, `search_files`, `list_dir`, `create_file`, `delete_file`, `edit_file`, `str_replace_editor`, `notebook_edit`, and the Claude-style names `Read`, `Write`, `Edit`, `Glob`, `Grep`, plus `read_files`, `write_to_file` and `replace_in_file`.
+
+<Note>
+The hook finds a path in `tool_input` under one of `path`, `file_path`, `target_file`, `notebook_path`, `directory` or `cwd`. A tool that names its target in any other field is not path-scoped, and `PATH_REQUIRED` fires only for the known file-tool set above. If you run a harness with its own tool names, check what the hook actually sees with `attesso log --json` or the ledger entry before trusting the scope.
+</Note>
+
+## Deny shell outright
+
+Shell and execute tools are not command-parsed and not path-scoped. A deployment that does not want a hook to execute anything can say so in one field:
+
+```json
+{ "version": 1, "allowed_roots": [], "exclusions": [], "shell_scope": "deny" }
+```
+
+That is an explicit denial, not a sandbox: it refuses every `execute` capability and nothing else. If a task needs a shell, this is the control that stops it; if it needs a scoped shell, Bounds is the wrong tool and the harness's own sandbox is the right one.
+
+## What this is not
+
+- Not a sandbox and not a container. The agent process still has whatever filesystem access its operating system grants. Path scope refuses a tool call; it does not confine the process.
+- Not a command parser. `execute` has no path argument to inspect, so `shell_scope` is all-or-nothing.
+- Not a substitute for the policy. A path inside a root can still be refused by the action policy, and both refusals are recorded with their own codes.

@@ -1,0 +1,104 @@
+---
+title: "The ledger"
+description: "One signed line per proposal: what it records, how to read it, and how to steer a task that is running now."
+icon: "list"
+---
+
+Every proposal that reaches the decision path is appended to `.attesso/ledger.jsonl`, one signed JSON line each. Allowed and refused entries are the same shape; the decision and the code tell them apart.
+
+```json
+{"v":1,"seq":1,"at":"2026-10-31T12:00:00.000Z","action":"tool.call",
+ "subject":"read_file","decision":"ALLOW","code":"ALLOW",
+ "policy_digest":"…","rules_digest":"…","args_hash":"…",
+ "kid":"…","prev":"genesis","meta":{"tokens":1200,"cost_usd":0.0004},"sig":"…"}
+```
+
+| Field | Meaning |
+|---|---|
+| `v`, `seq`, `at` | entry version, position in the log, ISO timestamp |
+| `action`, `subject` | what was proposed, and the thing acted on: a tool name, a payee, a repo, a recipient |
+| `decision`, `code` | `ALLOW` or `DENY`, plus the code that explains it |
+| `rule`, `tainted_by` | for a path refusal, the rule id and the earlier step that tainted the task |
+| `task`, `trust`, `capability` | the path fields the proposal carried |
+| `amount` | present only for money actions, as minor units plus currency |
+| `args_hash` | a digest of the arguments, never the payload |
+| `policy_digest`, `rules_digest`, `tools_digest` | the exact policy, rules and tool set the decision was made under |
+| `tool_hash`, `tool_pin` | the tool definition the caller claimed, and `verified` or `unverified` |
+| `control` | a signed control entry, when the line is a pause or stop rather than a call |
+| `meta` | whatever you passed to `--meta`: tokens, cost, duration, model |
+| `kid`, `prev`, `sig` | signing key id, previous entry hash, signature over the entry |
+
+## Integrity
+
+```sh
+npx attesso verify
+npx attesso verify --pin head.json
+```
+
+`verify` recomputes the hash chain and every signature and reports the first defect rather than a boolean: which entry does not chain, which one fails its signature, whether the last entry matches the recorded head. Change one byte and it names the entry; reorder two and the chain breaks; delete the last one and the head no longer matches.
+
+Each append is fsynced and the head is written after its line. On Linux that is a local-disk guarantee. On macOS, Node cannot issue `F_FULLFSYNC`, so a power cut can still lose the last write even on APFS; a network filesystem has the same limit. In that case the recorded head refuses the next append instead of guessing, which is why an interrupted write is visible rather than silent.
+
+`verify --pin` extends the check to a checkpoint you kept elsewhere. [Receipts and packets](/bounds/evidence) covers what a pin does and does not prove.
+
+## Read it
+
+```sh
+npx attesso show
+npx attesso report
+npx attesso report --json
+```
+
+`show` lists what was allowed, what was refused and why. `report` is the cost view, per task:
+
+```
+2059 entries, key 1qTU-tGyjuQwt3kI: 2058 actions, 455 refused (22%), 3,922,488 tokens, 3.1932 USD
+
+task                                actions  refused    top              tokens     cached       cost
+──────────────────────────────────  ───────  ─────────  ───────────────  ─────────  ───────────  ──────
+hermes-local-9552aa28437e88c0610a…  2058     455 (22%)  PATH_DENIED×455  3,922,488  645,785,088  3.1932
+```
+
+Actions are proposals; refusals carry the reason; tokens are input plus output, with cache reads shown separately because they bill at a different rate and usually dwarf the rest. Cost and token counts come from what the caller reported in `--meta` or from an `llm.session` entry the recorder writes from the agent's own usage record. The report never invents a number.
+
+## Watch and steer
+
+```sh
+npx attesso watch
+npx attesso watch --from-seq 0 --task job-1
+npx attesso watch --json
+```
+
+`watch` follows new decisions in a second terminal. `--from-seq 0` starts at the beginning of the ledger; `--task` narrows to one task.
+
+```sh
+npx attesso pause job-1 --reason "inspect the diff"
+npx attesso stop job-1 --reason "leave it stopped"
+npx attesso control
+npx attesso resume job-1
+```
+
+`pause` refuses the next calls of one task; `stop` keeps refusing until `resume` releases it. Both write a signed control entry with `TASK_PAUSED` or `TASK_STOPPED` and the task id. A pause blocks even when the hook was started in observe mode, because a human asked for it.
+
+The state lives in `control.json` beside the ledger. It is steering state, not a proof of human authority: anyone who can write that file can pause or release a task.
+
+## The local control surface
+
+```sh
+npx attesso ui
+npx attesso ui --port 8197 --no-open
+```
+
+The server binds `127.0.0.1:8197`, mints a per-process token and serves the page from the installed package. It shows the day's observed flow and the exact calls behind it, follows new decisions as they are appended, and writes mode and path changes to the same files the hook reads, so a change applies to the next call. It has no account, no hosted data and no snapshot file; `Ctrl-C` stops it.
+
+## Explain one entry
+
+```sh
+npx attesso explain 42
+```
+
+`explain` prints one entry in full: the verdict, the rule, the step that tainted the path, and what to do about it. The advice is specific to the code, so an agent that reads it can change its path instead of retrying the same call.
+
+## In-process embedders
+
+On Node 20 and later the decision is also published to the `bounds.decision` diagnostics channel. The event carries `seq`, `at`, `action`, `decision`, `code`, `rule`, `capability`, `trust`, `args_hash`, the policy, rules, tools and MCP digests, `tool_pin`, `entry_hash` and `kid`. It never carries the subject, the task, the amount, the arguments themselves, or your `meta`. Subscribe to it if you run the engine inside your own process and want a live stream without reading the file.

@@ -1,0 +1,98 @@
+---
+title: "Bounds"
+sidebarTitle: "Overview"
+description: "Decide an agent's next tool call before it runs, against the path of its task, and keep a signed record of the decision."
+icon: "shield-half"
+---
+
+Bounds decides an agent's tool call before it runs. Rules judge the proposed call against the path of its task, not in isolation, so a send that follows an untrusted read is refused and the refusal names the step that tainted it. Every verdict is appended to a local, hash-chained, signed ledger.
+
+Installed as `attesso`. Any action, not only payments. Free and unlimited on your own machine; \$0.00085 per synced decision when the record has to leave your laptop, \$2 of credit to start, no plan, no seats, no minimum.
+
+## What it decides, in one session
+
+```sh
+npx attesso init
+npx attesso log --action web.read --subject docs.example --task job-1 \
+  --trust untrusted --capability read
+npx attesso log --action mail.send --subject partner@example.com --task job-1 \
+  --capability send
+# #2 DENY mail.send partner@example.com (PATH_DENIED by step #1 under no-send-after-untrusted-read)
+npx attesso report
+```
+
+`log` evaluates the policy and the path, writes the verdict, and exits 1 when it refuses. `report` answers what a task cost and what it was stopped from doing, per task.
+
+## Connect an agent instead
+
+The connector is the shortest path: it initializes the ledger, writes the mode file, wires every harness that has an installer, and returns JSON.
+
+```sh
+npx attesso connect --write --mode observe --json
+npx attesso status --json
+```
+
+`observe` records every verdict without blocking. `npx attesso mode enforce` turns enforcement on for the next call. The harness wiring, the per-harness refusal shapes and the manual steps are in [Connect an agent](/bounds/connect).
+
+## Two tiers, one vocabulary
+
+| | Local (free, unlimited) | Hosted (paid, per synced decision) |
+|---|---|---|
+| Decides a call | yes, on your machine | yes, same codes |
+| Ledger | hash-chained and signed beside the key | mirrored to the workspace |
+| Proves | the file was not edited | a named human approved, a third party verifies |
+| Approval | none | passkey (WebAuthn) over exact terms |
+| Path scope, rules | yours, versioned with the code | portable rule set published and signed |
+| Review queue | no | yes, refusals can be resolved or ignored |
+
+The split is deliberate: the signing key sits beside the log, so a local record proves integrity, not authority. Human authority, cross-device keys and verification by someone who does not trust you need the hosted plane. [Receipts and packets](/bounds/evidence) states exactly which artifact proves what.
+
+## What lands in `.attesso/`
+
+| File | What it is |
+|---|---|
+| `key.json` | the Ed25519 key the ledger is signed with |
+| `policy.json` | the policy for one action (`"*"` when the ledger only records) |
+| `rules.json` | path rules: what a task may not do after a step |
+| `ledger.jsonl` | one signed line per proposed action |
+| `control.json` | paused and stopped tasks, written by `pause` and `stop` |
+| `paths.json` | filesystem scope for file tools, written by `attesso paths --set` |
+| `tools.json`, `tools.lock.json` | tool definitions and the pin taken over them |
+| `sync.json` | hosted sync cursor and device id |
+| `mode` | the active hook mode, read by the installed hook |
+| `config.json`, `lock`, `policies/`, `tools/`, `mcp/`, `ui-index.json` | internal state: workspace copy, write lock, hosted policy versions, tool and MCP snapshots, the UI's index |
+
+`--dir PATH` points any command at a different ledger directory.
+
+## What Bounds is not
+
+- Not a sandbox. File tools are scoped by roots and exclusions, and shell can be denied outright, but execute is never command-parsed. [Scope file tools](/bounds/paths) spells out the boundary.
+- Not observability or an eval harness. It decides before a call runs; it does not grade output after the fact.
+- Not a payment product. It does not execute or move money. The authorization chain for payments is the [core model](/concepts/core-model).
+
+## Price
+
+- Free and unlimited locally: rules, ledger, report, hook, receipts, no account.
+- \$0.00085 per synced decision, \$0.85 per 1,000, about \$34 a month for a developer running 40,000 agent calls.
+- \$2 of credit to start, about 2,350 decisions, no card. Top up from \$10 or \$20; a monthly cap you set.
+- Volume and platform contracts: contact sales.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Connect an agent" icon="plug" href="/bounds/connect">
+    One connector, five harnesses, and the observe-to-enforce ladder.
+  </Card>
+
+  <Card title="Write path rules" icon="route" href="/bounds/rules">
+    The rule language, step and repeat ceilings, and how to test a rule change.
+  </Card>
+
+  <Card title="Read the ledger" icon="list" href="/bounds/ledger">
+    Entry shape, report, watch, and steering a running task.
+  </Card>
+
+  <Card title="Prove a decision" icon="badge-check" href="/bounds/evidence">
+    Receipts, bundles, packets, and the limits of each.
+  </Card>
+</CardGroup>

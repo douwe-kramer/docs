@@ -1,0 +1,126 @@
+---
+title: "CLI reference"
+description: "Every command, flag, exit code and refusal code in one place."
+icon: "terminal"
+---
+
+`attesso` is one binary with no runtime dependencies. `--dir PATH` is global: it points any command at a ledger other than `.attesso` in the current directory.
+
+## Decide and record
+
+| Command | What it does |
+|---|---|
+| `attesso init [--dir PATH] [--profile balanced\|strict]` | create `.attesso` with a key, a policy, a rules file and an empty ledger |
+| `attesso log --action A [--subject S] [--amount 12.50 --currency EUR] [--task T] [--trust internal\|untrusted\|unknown] [--capability read\|write\|send\|execute\|spend] [--meta k=v ...] [--json]` | evaluate one proposal against control, tool pin, path scope, policy and path rules, then record it; exits 1 on a refusal |
+| `attesso verify [--pin PATH]` | recompute the chain and every signature; optionally check the log extends a pinned head |
+| `attesso rules set-profile balanced\|strict` | adopt a shipped profile, keeping the previous file as `rules.json.bak` |
+| `attesso replay [--policy PATH] [--rules PATH] [--json] [--max-newly-denied N]` | re-judge the whole ledger under a candidate policy and rules file; exit 1 when the budget is exceeded |
+| `attesso explain <seq>` | one entry in full: rule, tainting step, what to do |
+| `attesso suggest [--json]` | rules the ledger's own counts justify |
+
+## Read and steer
+
+| Command | What it does |
+|---|---|
+| `attesso show` | what was allowed, what was refused, and why |
+| `attesso report [--json]` | per task: actions, refusals with reasons, tokens and cost |
+| `attesso watch [--from-seq N] [--task ID] [--json]` | follow new decisions in one terminal |
+| `attesso pause <task> [--reason TEXT]` | refuse the next actions of one task |
+| `attesso stop <task> [--reason TEXT]` | refuse one task until it is resumed |
+| `attesso resume <task>` | release a paused or stopped task |
+| `attesso control [--json]` | list paused and stopped tasks |
+| `attesso ui [--port N] [--no-open]` | local control surface, default `127.0.0.1:8197` |
+
+## Prove
+
+| Command | What it does |
+|---|---|
+| `attesso prove <seq> [--out PATH]` | a portable receipt for one entry |
+| `attesso verify-receipt PATH [--key PATH]` | verify a receipt offline; no ledger needed |
+| `attesso checkpoint [--out PATH]` | a signed head you can keep off this machine |
+| `attesso export <seq> [--out PATH]` | entry, receipt, policy and rules in one bundle |
+| `attesso verify-bundle PATH [--key PATH] [--replay]` | verify a bundle offline, and re-run the verdict |
+| `attesso packet <seq> [--out PATH] [--title TEXT]` | a named packet around the bundle, ready to share |
+| `attesso verify-packet PATH [--key PATH] [--replay]` | verify a packet in an empty directory |
+
+## Connect
+
+| Command | What it does |
+|---|---|
+| `attesso setup [--write] [--enforce] [--dry-run]` | detect a harness, wire the hook, write the agent block |
+| `attesso connect [--write] [--mode observe\|enforce\|off] [--harness KEY] [--json]` | init, mode, hook and agent block in one call |
+| `attesso status [--json]` | connection, mode and wired harnesses |
+| `attesso mode [observe\|enforce\|off] [--json]` | read or set the active hook mode |
+| `attesso paths [--json\|--set FILE]` | read or replace the filesystem scope |
+| `attesso hook [--observe]` | harness hook: one tool call on stdin, native refusal on stdout |
+| `attesso serve [--observe]` | long-lived: one JSON request per line in, one verdict out |
+
+## Hosted
+
+| Command | What it does |
+|---|---|
+| `attesso sync [--url URL] [--key KEY] [--limit N] [--json] [--dry-run] [--watch] [--interval MS]` | send the next decisions to the hosted mirror; `--limit` 1 to 100, default 50; `--watch` repeats every 5 seconds |
+| `attesso policy pull [--url URL] [--key KEY] [--apply] [--json]` | verify the hosted rule bundle, and write `rules.json` with `--apply` |
+
+## Tools
+
+| Command | What it does |
+|---|---|
+| `attesso tools pin --manifest PATH` | pin the tool definitions a decision was made under |
+| `attesso tools verify --manifest PATH` | compare the pinned definitions with the manifest |
+| `attesso-mcp [--dir PATH] [--era auto\|modern\|legacy] -- <server> [args...]` | stdio MCP adapter that pins and enforces the server surface |
+| `attesso-mcp --print-manifest -- <server> [args...]` | print the server's surface as a pinnable manifest |
+| `attesso-control-mcp [--dir PATH]` | stdio control server: status, connect, mode, paths |
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | allowed, or verification passed |
+| `1` | refused, a failed verification, a replay budget exceeded, or an invalid amount |
+| `2` | usage error, or a command that needs a ledger found none |
+
+## Refusal codes
+
+| Code | Source | Meaning |
+|---|---|---|
+| `ALLOW` | policy | the proposal was allowed |
+| `ACTION_MISMATCH` | policy | the action is not the one the policy governs |
+| `REQUIRED_ATTRIBUTE_MISSING` | policy | a subject or an amount the policy needs was not supplied |
+| `VALUE_NOT_ALLOWED` | policy | the subject is not in the policy's list |
+| `VALUE_MISMATCH` | policy | the currency does not match |
+| `ABOVE_MAXIMUM` | policy | the amount exceeds `max_amount` |
+| `OUTSIDE_DATE_RANGE` | policy | the call is outside `on_or_after` / `on_or_before` |
+| `PATH_DENIED` | path rules | a rule matched the task's path; `tainted_by` names the step |
+| `STEP_LIMIT` | path rules | the task reached `max_steps` |
+| `REPEAT_LIMIT` | path rules | the task repeated the same call past `max_repeats` |
+| `PATH_SCOPE_DENIED` | path scope | the path is excluded or outside every root, or the root does not grant the capability |
+| `PATH_REQUIRED` | path scope | a known file tool carried no resolvable path |
+| `SHELL_SCOPE_DENIED` | path scope | `shell_scope: "deny"` and the capability is `execute` |
+| `TOOL_CHANGED` | tool pin | the tool definition hash does not match the pin |
+| `TASK_PAUSED`, `TASK_STOPPED` | control | a human paused or stopped the task |
+| `CONTROL_UNAVAILABLE` | control | the hook could not read the control file; the call fails closed |
+| `DECISION_UNAVAILABLE` | hosted | the engine could not answer; an outage is never recorded as a decision |
+| `EXECUTION_WINDOW_ENDED` | hosted | the state of the authorization no longer allows the action |
+
+A timeout or outage never returns a policy code: it returns `DECISION_UNAVAILABLE`, so an incident is never recorded as a user's decision.
+
+## Money
+
+`--amount` takes the decimal form (`12.50`). The policy stores whole minor units (`max_amount: 25000` is 250.00 in a two-decimal currency). Supported currencies and exponents:
+
+| Currency | Decimals |
+|---|---|
+| EUR, USD, GBP, CHF, SEK | 2 |
+| JPY | 0 |
+
+An unsupported currency is an error, not a rounding guess. Without `max_amount` and `currency` a policy is judged on action, subject and window alone.
+
+## Environment
+
+| Variable | Used by |
+|---|---|
+| `ATTESSO_SYNC_URL` | `sync`, `policy pull` when no `--url` is given |
+| `ATTESSO_API_KEY` | `sync`, `policy pull` when no `--key` is given |
+
+Explicit flags win, then the environment, then `~/.config/attesso/config.json`.

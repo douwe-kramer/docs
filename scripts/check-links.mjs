@@ -133,9 +133,50 @@ for (const page of pages) {
   }
 }
 
+// The sidebar is a second set of links: a page key in docs.json with no file
+// behind it is a 404 that no markdown link points at.
+function collectPageKeys(node, keys = []) {
+  if (!node || typeof node !== 'object') return keys;
+  if (typeof node.page === 'string') keys.push(node.page);
+  if (Array.isArray(node.pages)) {
+    for (const item of node.pages) {
+      if (typeof item === 'string') keys.push(item);
+      else collectPageKeys(item, keys);
+    }
+  }
+  for (const key of ['groups', 'tabs', 'anchors', 'dropdowns', 'versions', 'languages']) {
+    if (Array.isArray(node[key])) node[key].forEach((child) => collectPageKeys(child, keys));
+  }
+  return keys;
+}
+
+const configPath = join(root, 'docs.json');
+if (existsSync(configPath)) {
+  let config = null;
+  try {
+    config = JSON.parse(readFileSync(configPath, 'utf8'));
+  } catch (error) {
+    failures.push(`docs.json is not valid JSON: ${error.message}`);
+  }
+  if (config !== null) {
+    const keys = new Set(collectPageKeys(config.navigation ?? {}));
+    for (const key of keys) {
+      if (resolvePage(join(root, 'index.mdx'), `/${key}`) === null) {
+        failures.push(`docs.json lists ${key}, which has no page file`);
+      }
+    }
+    for (const redirect of Array.isArray(config.redirects) ? config.redirects : []) {
+      if (typeof redirect?.destination !== 'string') continue;
+      if (resolvePage(join(root, 'index.mdx'), redirect.destination) === null) {
+        failures.push(`docs.json redirect ${redirect.source ?? '(no source)'} points at ${redirect.destination}, which has no page file`);
+      }
+    }
+  }
+}
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);
   console.error(`\n${failures.length} broken link(s) across ${pages.length} pages`);
   process.exit(1);
 }
-console.log(`Link check passed: ${pages.length} pages, no broken internal links or anchors`);
+console.log(`Link check passed: ${pages.length} pages plus the docs.json navigation, no broken targets`);
