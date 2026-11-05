@@ -97,6 +97,8 @@ The previous file is kept as `rules.json.bak`, and the command prints the new di
 
 `balanced` blocks the outbound boundary and duplicate fetches; it leaves local edits and commands alone. `strict` adds `write` and `execute` to the first rule, for an untrusted environment where a shell command itself can exfiltrate.
 
+Any rule may set `"enforce": true`. In observe mode that rule alone blocks; every other rule keeps recording. Use it to turn on one rule you have replayed and accepted without turning the whole gate on.
+
 ## Ceilings for loops
 
 The repeat rule above is narrow on purpose: one subject, same arguments, thirty minutes. A ceiling is the general form and belongs on the task:
@@ -110,6 +112,17 @@ The repeat rule above is narrow on purpose: one subject, same arguments, thirty 
 ```
 
 `max_steps` counts the task's history, so it stops the afternoon, not one call. `max_repeats` needs the caller to supply an argument fingerprint; a harness that sends `args_hash` gets repeat detection, one that does not is left with `max_steps`.
+
+## Run budgets
+
+`max_steps` and `max_repeats` cap one task's path. `max_tokens` and `max_cost_usd` cap a run's measured spend. The check runs on the next tool call, so a usage report is never blocked:
+
+```json
+{ "id": "run-budget", "max_tokens": 200000, "max_cost_usd": 0.5,
+  "deny": { "capabilities": ["execute", "write", "send"] }, "enforce": true }
+```
+
+`npx attesso budget --tokens 200000 --usd 0.50 --enforce` writes that rule and keeps the rest of the file; `--off` removes it. A budget is scoped to the active run: `run start --goal "..."` opens one, `run end --outcome success` closes it. Without an active run it falls back to the task id, which can span days. `max_tokens` is exact when the recorder reports usage; `max_cost_usd` only fires when the reported cost is above zero.
 
 ## Find rules from the ledger
 
@@ -144,7 +157,7 @@ Replay is a diagnostic: it uses the history the ledger holds and cannot prove th
 ## Where the policy ends and the rules begin
 
 - `policy.json` decides one action: action name, subjects, amount, currency, window. Its codes are `ACTION_MISMATCH`, `REQUIRED_ATTRIBUTE_MISSING`, `VALUE_NOT_ALLOWED`, `VALUE_MISMATCH`, `ABOVE_MAXIMUM`, `OUTSIDE_DATE_RANGE`.
-- `rules.json` decides what a task may not do *after* a step, plus the step and repeat ceilings. Its codes are `PATH_DENIED`, `STEP_LIMIT`, `REPEAT_LIMIT`.
+- `rules.json` decides what a task may not do *after* a step, plus the step, repeat and run-spend ceilings. Its codes are `PATH_DENIED`, `STEP_LIMIT`, `REPEAT_LIMIT`, `BUDGET_EXCEEDED`.
 - `paths.json` decides which files a file tool may touch. Its codes are `PATH_SCOPE_DENIED`, `PATH_REQUIRED` and `SHELL_SCOPE_DENIED`. See [Scope file tools](/bounds/paths).
 
 All of these run on every proposal, and the first refusal wins. The order is fixed:

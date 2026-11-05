@@ -54,7 +54,9 @@ The split is deliberate: the signing key sits beside the log, so a local record 
 | `key.json` | the Ed25519 key the ledger is signed with |
 | `policy.json` | the policy for one action (`"*"` when the ledger only records) |
 | `rules.json` | path rules: what a task may not do after a step |
-| `ledger.jsonl` | one signed line per proposed action |
+| `ledger.jsonl` | one signed line per proposed action, plus the signed `run.start` / `run.end` markers |
+| `run.json` | the active run: id, goal and start; written by `run start`, removed by `run end` |
+| `details/` | local redacted previews, one per decision; never synced |
 | `control.json` | paused and stopped tasks, written by `pause` and `stop` |
 | `paths.json` | filesystem scope for file tools, written by `attesso paths --set` |
 | `tools.json`, `tools.lock.json` | tool definitions and the pin taken over them |
@@ -63,6 +65,8 @@ The split is deliberate: the signing key sits beside the log, so a local record 
 | `config.json`, `lock`, `policies/`, `tools/`, `mcp/`, `ui-index.json` | internal state: workspace copy, write lock, hosted policy versions, tool and MCP snapshots, the UI's index |
 
 `--dir PATH` points any command at a different ledger directory.
+
+The `run.start` and `run.end` markers are signed entries but not decisions: counts, usage, the flow and the hosted sync leave them out. A budget scoped to the run sums the measured usage recorded between the markers; a run is the unit a report is read against.
 
 ## What Bounds is not
 

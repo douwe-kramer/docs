@@ -61,6 +61,17 @@ hermes-local-9552aa28437e88c0610a…  2058     455 (22%)  PATH_DENIED×455  3,92
 
 Actions are proposals; refusals carry the reason; tokens are input plus output, with cache reads shown separately because they bill at a different rate and usually dwarf the rest. Cost and token counts come from what the caller reported in `--meta` or from an `llm.session` entry written by `attesso usage` (or another recorder) from the agent's own usage record. The report never invents a number.
 
+## Runs
+
+```sh
+npx attesso run start --goal "fix the failing test"
+npx attesso run status
+npx attesso budget --tokens 200000 --enforce
+npx attesso run end --outcome success --note "the test passes"
+```
+
+A run is the unit a budget and a report can scope to. `run start` and `run end` write signed markers (the actions `run.start` and `run.end`) and a `run.json` pointer beside the ledger; every decision in between carries the run id. The markers are not decisions: counts, usage totals, the flow and the hosted sync leave them out. `run end` records `success`, `failed`, `abandoned` or `unknown`, plus an optional note. `run status --json` returns the active run or the last one.
+
 ## Watch and steer
 
 ```sh
@@ -98,6 +109,18 @@ npx attesso explain 42
 ```
 
 `explain` prints one entry in full: the verdict, the rule, the step that tainted the path, and what to do about it. The advice is specific to the code, so an agent that reads it can change its path instead of retrying the same call.
+
+## The local preview
+
+```sh
+npx attesso detail 42
+npx attesso detail 42 --json
+npx attesso verify --details
+```
+
+The hook, `serve` and the MCP proxy record a small redacted preview beside the signed entry: command, path, URL, query, recipient and argument key names. File contents, message bodies and patch text are never stored; credentials are redacted before the file is written. The preview lives in `details/`, mode 0700, never syncs, never enters a bundle or a packet, and a failed write never blocks the decision.
+
+`detail <seq>` checks the entry signature and the preview hash before printing. `--json` names one of `verified`, `none`, `missing`, `changed` or `unavailable`; the last three exit 2. `verify --details` checks every preview and exits 2 when one changed. `--delete` removes the preview and leaves the signed entry valid. The local page shows the same preview when you select a call.
 
 ## In-process embedders
 

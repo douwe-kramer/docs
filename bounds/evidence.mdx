@@ -68,6 +68,10 @@ A record names which signer it carries, and the verifier refuses a combination i
 
 A record that claims human authority must carry a WebAuthn assertion. A local or CI key is not interchangeable with one, even when both verify.
 
+## The local preview is not part of the packet
+
+The signed entry carries `detail_hash`, the SHA-256 of a small redacted preview kept beside the ledger. The preview never travels: it is not in a bundle, a packet, a receipt or the hosted sync. A preview you choose to disclose can be checked against the `detail_hash` in the signed entry, and `attesso verify --details` checks every preview on the machine. A missing, changed or unavailable preview is a local read error, not a change to the decision.
+
 ## The limit, stated plainly
 
 The signing key lives in `.attesso/key.json`, in the same directory as the log. Anything that can write the log can write a new one and sign it. A receipt proves the entry is in the log whose head this key signed; it does not prove a human approved it.

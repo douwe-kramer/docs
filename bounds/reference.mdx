@@ -12,7 +12,7 @@ icon: "terminal"
 |---|---|
 | `attesso init [--dir PATH] [--profile balanced\|strict]` | create `.attesso` with a key, a policy, a rules file and an empty ledger |
 | `attesso log --action A [--subject S] [--amount 12.50 --currency EUR] [--task T] [--trust internal\|untrusted\|unknown] [--capability read\|write\|send\|execute\|spend] [--meta k=v ...] [--json]` | evaluate one proposal against control, tool pin, path scope, policy and path rules, then record it; exits 1 on a refusal |
-| `attesso verify [--pin PATH]` | recompute the chain and every signature; optionally check the log extends a pinned head |
+| `attesso verify [--pin PATH] [--details]` | recompute the chain and every signature; optionally check the log extends a pinned head, or check every local preview against its signed hash |
 | `attesso rules set-profile balanced\|strict` | adopt a shipped profile, keeping the previous file as `rules.json.bak` |
 | `attesso replay [--policy PATH] [--rules PATH] [--json] [--max-newly-denied N]` | re-judge the whole ledger under a candidate policy and rules file; exit 1 when the budget is exceeded |
 | `attesso explain <seq>` | one entry in full: rule, tainting step, what to do |
@@ -24,6 +24,11 @@ icon: "terminal"
 |---|---|
 | `attesso show` | what was allowed, what was refused, and why |
 | `attesso report [--json]` | per task: actions, refusals with reasons, tokens and cost |
+| `attesso run start [--goal TEXT]` | open a signed run; later decisions carry its id |
+| `attesso run status [--json]` | the active run, or the last one |
+| `attesso run end [--outcome success\|failed\|abandoned\|unknown] [--note TEXT]` | close the run with its outcome |
+| `attesso budget --tokens N [--usd X] [--enforce] [--off]` | set, raise or clear the run budget rule |
+| `attesso detail <seq> [--json] [--delete]` | read or delete the local redacted preview for one decision |
 | `attesso watch [--from-seq N] [--task ID] [--json]` | follow new decisions in one terminal |
 | `attesso pause <task> [--reason TEXT]` | refuse the next actions of one task |
 | `attesso stop <task> [--reason TEXT]` | refuse one task until it is resumed |
@@ -79,7 +84,7 @@ icon: "terminal"
 |---|---|
 | `0` | allowed, or verification passed |
 | `1` | refused, a failed verification, a replay budget exceeded, or an invalid amount |
-| `2` | usage error, or a command that needs a ledger found none |
+| `2` | usage error, a missing or changed preview, or a command that needs a ledger found none |
 
 ## Refusal codes
 
@@ -95,6 +100,7 @@ icon: "terminal"
 | `PATH_DENIED` | path rules | a rule matched the task's path; `tainted_by` names the step |
 | `STEP_LIMIT` | path rules | the task reached `max_steps` |
 | `REPEAT_LIMIT` | path rules | the task repeated the same call past `max_repeats` |
+| `BUDGET_EXCEEDED` | run budget | the active run's measured tokens or cost reached `max_tokens` / `max_cost_usd` |
 | `PATH_SCOPE_DENIED` | path scope | the path is excluded or outside every root, or the root does not grant the capability |
 | `PATH_REQUIRED` | path scope | a known file tool carried no resolvable path |
 | `SHELL_SCOPE_DENIED` | path scope | `shell_scope: "deny"` and the capability is `execute` |

@@ -37,6 +37,8 @@ npx attesso sync --watch
 
 Each batch carries at most `limit` rows. A decision carries only `seq`, `occurred_at`, `action`, `subject`, `capability`, `decision`, `code`, `task` and `entry_hash`; a usage row carries `seq`, `occurred_at`, `task`, `model`, `input_tokens`, `output_tokens`, `cached_tokens` and `cost_usd`. Arguments, prompts, `meta` and amount stay on the machine. The device id is the ledger's key id; change the key and the cursor starts again rather than claiming someone else's history. Usage rows are mirrored but not metered.
 
+Run markers and local previews are not synced: `run.start` and `run.end` are not decisions, and the redacted preview under `details/` never leaves the machine.
+
 The cursor lives in `.attesso/sync.json` and advances to the last sent seq only after the server answers with valid integers. A failed request leaves it alone, so the next run retries the same batch; the server deduplicates by device and sequence, which makes a retry safe. `accepted`, `skipped` and `metered` are what the workspace counted; `metered` is what it booked as billable, and `usage` is how many usage rows it stored.
 
 ## The hosted views
