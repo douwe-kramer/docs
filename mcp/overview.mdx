@@ -129,11 +129,12 @@ do not rewrite it into a new request under the same authority.
 - `PENDING_APPROVAL` is not permission. Never execute on it.
 - `can_execute: false` is a refusal. Read the reason; do not retry the same
   action under the same authorization.
+- `get_receipt` returns `RECEIPT_NOT_READY` until the mandate has been
+  committed.
 - A single-use mandate is consumed by the first commit. A second commit is
   rejected.
 - Reusing a `request_id` with different terms returns `IDEMPOTENCY_CONFLICT`.
-- A tenant with too many requests waiting for approval returns
-  `OPEN_MANDATE_LIMIT`.
+- A tenant with too many open mandates returns `OPEN_MANDATE_LIMIT`.
 - Approval is always the subject's hosted passkey ceremony. There is no approve
   tool and no API-key approval path.
 
