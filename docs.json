@@ -34,6 +34,14 @@
         ]
       },
       {
+        "group": "MCP",
+        "icon": "plug",
+        "expanded": true,
+        "pages": [
+          "mcp/overview"
+        ]
+      },
+      {
         "group": "Core model",
         "icon": "shapes",
         "pages": [
