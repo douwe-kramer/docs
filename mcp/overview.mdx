@@ -1,0 +1,186 @@
+---
+title: "Attesso MCP"
+description: "Give an agent a bounded action, keep the human approval, and return a signed receipt anyone can verify."
+icon: "plug"
+---
+
+Attesso exposes the mandate lifecycle to an MCP client over remote HTTP. The
+test server is the shortest complete path through the real approval and
+evidence stack. It is the surface to evaluate before an integration.
+
+```text
+https://mcp-test.attesso.com/mcp
+```
+
+The test server uses test-plane data. It does not authorize live money, execute
+payments, or hold payment credentials.
+
+## The gap MCP leaves open
+
+MCP authorization answers whether a client may call a server. OAuth binds the
+token to the endpoint and can carry the user and organization identity. It does
+not record what the person allowed the agent to do, at which merchant, for how
+much, or for how long.
+
+Attesso adds the missing layer:
+
+- a bounded mandate the person approves with a passkey;
+- a deterministic decision for every proposed action;
+- one execution of one allowed authorization;
+- a signed record a third party verifies without trusting Attesso.
+
+MCP is the way in. The authority and the record are the product.
+
+## The MCP Test Drive
+
+The test drive is one complete loop, not a mock:
+
+1. The agent asks for one bounded test payment.
+2. The person approves the exact terms with a passkey in the browser.
+3. The agent reads the state, authorizes the action, commits once, and fetches
+   the receipt.
+4. The receipt is verified against the published keys.
+
+There is no SDK, no install, and no API key. A client that supports remote HTTP
+and OAuth 2.1 can connect. The test endpoint is free while it is a test
+endpoint.
+
+If your client cannot complete the loop, send the `request_id` and the exact
+error. We will reproduce it and tell you whether the failure is in the client,
+the endpoint, or the action.
+
+## Connect
+
+1. Add `https://mcp-test.attesso.com/mcp` to an MCP client that supports remote
+   HTTP and OAuth 2.1.
+2. Let the client discover
+   `https://mcp-test.attesso.com/.well-known/oauth-protected-resource/mcp` and
+   open the Clerk sign-in. The requested scopes are `profile`, `email`, and
+   `user:org:read`.
+3. Complete the sign-in with the Attesso account that should own the test
+   request.
+4. Ask the agent to call `request_spend` with a stable `request_id`, an amount in
+   minor units, a currency, and an optional merchant and purpose.
+5. Open the returned `approval_url` and approve the exact terms with a passkey.
+6. Call `approval_status` until the mandate is `ACTIVE`, then
+   `authorize_action`. Proceed only when `can_execute` is exactly `true`.
+7. Call `commit_action` once with the executor reference, then call
+   `get_receipt` and verify the envelope.
+
+The test endpoint and the production API-key server do not share credentials.
+
+| | Test MCP server | Production MCP server |
+| --- | --- | --- |
+| URL | `https://mcp-test.attesso.com/mcp` | `https://api.attesso.com/v1/mcp` |
+| Authorization | OAuth 2.1 through Clerk | Integrator API key |
+| Data | Test plane | Live |
+| Commitment opening | Held by the test server | Held by the client |
+| Approval | Hosted passkey ceremony | Hosted passkey ceremony |
+
+## Tools
+
+The public surface is five intent tools. They map one-to-one to the lifecycle;
+a use case changes the approved terms, not the tool list.
+
+| Tool | Input | Output |
+| --- | --- | --- |
+| `request_spend` | `request_id`, `amount_minor`, `currency`, optional `merchant`, `purpose`, `execution_window_seconds` | `mandate_id`, `state`, `request_id`, `approval_url`, `approval_expires_at`, `instruction` |
+| `approval_status` | `mandate_id` | `mandate_id`, `state`, `version`, optional `approved_at`, `instruction` |
+| `authorize_action` | `request_id`, `mandate_id`, `amount_minor`, `currency`, optional `merchant`, `purpose`, `execution_window_seconds` | `authorization_id`, `decision`, `can_execute`, `reason`, optional `execute_before`, `request_id` |
+| `commit_action` | `request_id`, `authorization_id`, `external_action_reference` | `authorization_id`, `state`, optional `committed_at`, `receipt_ready` |
+| `get_receipt` | `mandate_id` | `format`, `protected`, `payload`, `signature`, `jwks_url`, `verification` |
+
+The test limit is 100000 minor units per request. An execution window is between
+60 and 3600 seconds and defaults to 900.
+
+### Example request
+
+```json
+{
+  "request_id": "invoice-2026-0042",
+  "amount_minor": 4200,
+  "currency": "EUR",
+  "merchant": "Acme Components",
+  "purpose": "Invoice 2026-0042"
+}
+```
+
+`request_spend` returns a mandate and an approval URL. It does not approve the
+request.
+
+### Example decision
+
+```json
+{
+  "authorization_id": "aut_...",
+  "decision": "ALLOW",
+  "can_execute": true,
+  "reason": { "code": "POLICY_MATCH" },
+  "execute_before": "2026-11-13T17:47:37Z",
+  "request_id": "invoice-2026-0042"
+}
+```
+
+Execute only on `can_execute: true`. A `DENY` is final for that proposed action;
+do not rewrite it into a new request under the same authority.
+
+## Failure semantics
+
+- `PENDING_APPROVAL` is not permission. Never execute on it.
+- `can_execute: false` is a refusal. Read the reason; do not retry the same
+  action under the same authorization.
+- A single-use mandate is consumed by the first commit. A second commit is
+  rejected.
+- Reusing a `request_id` with different terms returns `IDEMPOTENCY_CONFLICT`.
+- A tenant with too many requests waiting for approval returns
+  `OPEN_MANDATE_LIMIT`.
+- Approval is always the subject's hosted passkey ceremony. There is no approve
+  tool and no API-key approval path.
+
+## Receipt verification
+
+`get_receipt` returns a compact JWS in the `attesso.evidence.v1` format. Verify
+ES256 over the exact ASCII bytes of `protected.payload` with the key whose `kid`
+appears in `protected`. The public keys are at:
+
+```text
+https://mcp-test.attesso.com/.well-known/jwks.json
+```
+
+Do not call Attesso to decide whether the record is valid. The payload contains
+the mandate, its policy and digest, and the ordered events. A complete test run
+has seven events:
+
+```text
+mandate.created
+approval_session.created
+approval_session.used
+mandate.approved
+authorization.created
+authorization.committed
+mandate.consumed
+```
+
+## Use cases
+
+The test server demonstrates the payment action. The same shape carries the
+actions an agent actually takes:
+
+- **Invoice payments:** exact payee, amount to the cent, currency, and reference.
+- **Travel:** route, dates, cabin, property, and amount bounds.
+- **Procurement:** one purchase order inside a vendor, amount, and date window.
+- **AI and compute spend:** a recurring budget with a per-period cap.
+
+Attesso authorizes and records. Your system executes on its own rail and supplies
+its external action reference to `commit_action`.
+
+## Test-only boundaries
+
+- The server holds the commitment opening for this test path only. A live
+  integration keeps the opening with its own client.
+- The endpoint makes no payment and authorizes no live money.
+- The test endpoint is not a production authority.
+- The endpoint claims no MCP conformance. It is a test surface for the
+  authorization and evidence loop.
+
+For the product page, see [attesso.com/mcp](https://www.attesso.com/mcp).
