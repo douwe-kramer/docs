@@ -41,6 +41,33 @@ Run markers and local previews are not synced: `run.start` and `run.end` are not
 
 The cursor lives in `.attesso/sync.json` and advances to the last sent seq only after the server answers with valid integers. A failed request leaves it alone, so the next run retries the same batch; the server deduplicates by device and sequence, which makes a retry safe. `accepted`, `skipped` and `metered` are what the workspace counted; `metered` is what it booked as billable, and `usage` is how many usage rows it stored.
 
+## Coverage
+
+Each sync also declares the window it mirrored: `from_seq` to `to_seq`, the rows it
+excluded by design and any sequence it has a hole at. Run markers and usage rows
+are the only exclusions; anything else is a gap. The device signs the statement
+with its ledger key, and the statement names the exact bytes it covers.
+
+The server verifies that signature, re-reads the rows it stored for the range, and
+refuses the window when the stored set is not the set the statement names. A window
+whose claim the database cannot match is never recorded, so a coverage row is
+evidence about rows Attesso actually holds.
+
+```sh
+npx attesso sync            # declares the window and stores the attestation
+npx attesso coverage        # every stored window, its range and its state
+npx attesso coverage --jwks jwks.json   # verify each signature offline
+```
+
+A stored window comes back with an ES256 attestation from Attesso over the range,
+the device statement, a digest of the exact bytes that statement signed and the
+time of receipt. The CLI writes it to `.attesso/attestations/<window_id>.jws` with
+mode 0600; a replayed window returns no second envelope. `attesso coverage` exits
+non-zero the moment one envelope does not verify, so it runs as a check.
+
+Download `https://api.attesso.com/.well-known/jwks.json` once and verification
+needs no network call and no Attesso account.
+
 ## The hosted views
 
 Once a workspace has synced a decision, the dashboard's Bounds entry opens the hosted overview at `/dashboard/<env>/bounds/hosted` directly. `/dashboard/<env>/bounds?setup=1` keeps the local setup instructions for a workspace that has not synced yet.
@@ -54,6 +81,13 @@ The overview shows the lifetime decision and refusal counts, device sync health,
 ### Decisions
 
 `/dashboard/<env>/bounds/decisions` lists every mirrored decision, newest first, with filters for decision (`all`, `ALLOW`, `DENY`), code, device and window (24 hours, 7 days, 30 days, all time). The refusal-reason links on the overview open this page filtered to that code. Use the decision filter to see only refused calls, and the window filter to bound a long history.
+
+### Coverage
+
+`/dashboard/<env>/bounds/coverage` lists the windows each device declared, with its
+state, the mirrored and excluded counts, the declared gaps, the row digest and the
+receipt time, filterable by device. A window reads `attested` only when the device
+signature verified and the stored rows matched it.
 
 Both pages use a keyset cursor: **Older** continues exactly where the page ended, and the filters live in the URL, so a filtered view can be shared or reloaded. The overview requests three reviews and five decisions; the full pages request twenty rows per page.
 
